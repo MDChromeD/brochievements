@@ -76,3 +76,14 @@ func GameFan(stat *storage.GameStat) Achievement {
 		),
 	}
 }
+
+func (a Achievement) Prompt() string {
+	return `
+Название достижения: ` + a.Title + `
+Победитель: ` + a.Username + `
+Значение: ` + a.Value + `
+Период: ` + a.Period + `
+
+Сформулируй короткое, смешное и дружелюбное описание для Discord.
+`
+}

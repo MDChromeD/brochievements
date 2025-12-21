@@ -2,6 +2,7 @@ package main
 
 import (
 	"brochievements/internal/achievements"
+	"brochievements/internal/ai"
 	"brochievements/internal/storage"
 	"fmt"
 	"log"
@@ -32,6 +33,13 @@ func main() {
 	channelID := os.Getenv("ACHIEVEMENTS_CHANNEL_ID")
 	if channelID == "" {
 		log.Fatal("ACHIEVEMENTS_CHANNEL_ID not set")
+	}
+
+	aiGen, err := ai.NewOpenAIGenerator()
+	if err != nil {
+		log.Println("AI disabled:", err)
+	} else {
+		log.Println("AI enabled")
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -66,7 +74,7 @@ func main() {
 	log.Println("Brochievements bot is running. Press CTRL-C to exit.")
 
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(30 * time.Hour)
 		defer ticker.Stop()
 
 		log.Println("Weekly achievements scheduler started")
@@ -76,7 +84,7 @@ func main() {
 
 		for {
 			<-ticker.C
-			publishWeeklyAchievements(dg, store, channelID)
+			publishWeeklyAchievements(dg, store, channelID, aiGen)
 		}
 	}()
 
@@ -141,6 +149,7 @@ func publishWeeklyAchievements(
 	dg *discordgo.Session,
 	store *storage.Storage,
 	channelID string,
+	aiGen ai.Generator,
 ) {
 	var achievementsList []achievements.Achievement
 
@@ -181,10 +190,19 @@ func publishWeeklyAchievements(
 	message.WriteString("🏆 **Итоги недели**\n\n")
 
 	for _, ach := range achievementsList {
+		description := ach.Description
+
+		// 🧠 Если ИИ доступен — улучшаем текст
+		if aiGen != nil {
+			if text, err := aiGen.Generate(ach.Prompt()); err == nil {
+				description = text
+			}
+		}
+
 		message.WriteString(fmt.Sprintf(
 			"**%s**\n%s\n\n",
 			ach.Title,
-			ach.Description,
+			description,
 		))
 	}
 

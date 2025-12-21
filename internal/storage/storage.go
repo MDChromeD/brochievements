@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"log"
+	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -75,7 +76,13 @@ func (s *Storage) StartVoiceSession(
 		VALUES (?, ?, ?, datetime('now'))
 	`, userID, username, channelID)
 
-	return err
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") {
+			return nil // сессия уже активна → игнор
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *Storage) EndVoiceSession(
