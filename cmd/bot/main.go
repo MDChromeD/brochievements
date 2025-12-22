@@ -47,6 +47,13 @@ func main() {
 		log.Fatal("error creating Discord session:", err)
 	}
 
+	commands := []*discordgo.ApplicationCommand{
+		{
+			Name:        "stats",
+			Description: "Показать мою статистику",
+		},
+	}
+
 	dg.Identify.Intents = discordgo.IntentsGuilds |
 		discordgo.IntentsGuildMessages |
 		discordgo.IntentsGuildVoiceStates |
@@ -66,6 +73,31 @@ func main() {
 	) {
 		handlePresence(s, p, store)
 	})
+
+	dg.AddHandler(func(
+		s *discordgo.Session,
+		i *discordgo.InteractionCreate,
+	) {
+		if i.Type != discordgo.InteractionApplicationCommand {
+			return
+		}
+
+		switch i.ApplicationCommandData().Name {
+		case "stats":
+			handleStats(s, i, store)
+		}
+	})
+
+	for _, cmd := range commands {
+		_, err := dg.ApplicationCommandCreate(
+			dg.State.User.ID,
+			"",
+			cmd,
+		)
+		if err != nil {
+			log.Fatalf("Cannot create command %q: %v", cmd.Name, err)
+		}
+	}
 
 	if err = dg.Open(); err != nil {
 		log.Fatal("error opening connection:", err)
@@ -244,4 +276,56 @@ func handlePresence(
 			}
 		}
 	}
+}
+
+func handleStats(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	store *storage.Storage,
+) {
+	user := i.Member.User
+	userID := user.ID
+
+	msgCount, _ := store.CountMessages(userID)
+	voiceSec, _ := store.VoiceTimeSeconds(userID)
+	gameCount, _ := store.GameSessionsCount(userID)
+	firstSeen, _ := store.FirstSeen(userID)
+
+	voiceHours := float64(voiceSec) / 3600
+
+	embed := &discordgo.MessageEmbed{
+		Title: "📊 Статистика пользователя",
+		Color: 0x5865F2,
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: user.AvatarURL(""),
+		},
+		Fields: []*discordgo.MessageEmbedField{
+			{
+				Name:   "💬 Сообщений",
+				Value:  fmt.Sprintf("%d", msgCount),
+				Inline: true,
+			},
+			{
+				Name:   "🎧 Время в войсе",
+				Value:  fmt.Sprintf("%.2f ч", voiceHours),
+				Inline: true,
+			},
+			{
+				Name:   "🎮 Игровых сессий",
+				Value:  fmt.Sprintf("%d", gameCount),
+				Inline: true,
+			},
+			{
+				Name:  "🗓 Первый раз замечен",
+				Value: firstSeen.Format("02.01.2006"),
+			},
+		},
+	}
+
+	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
 }

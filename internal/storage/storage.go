@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -219,4 +220,62 @@ func (s *Storage) TopGameLastWeek() (*GameStat, error) {
 	}
 
 	return &stat, nil
+}
+
+type UserStats struct {
+	MessagesCount int
+	VoiceSeconds  int64
+	GamesCount    int
+	FirstSeen     time.Time
+}
+
+func (s *Storage) CountMessages(userID string) (int, error) {
+	var count int
+	err := s.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM messages
+		WHERE user_id = ?
+	`, userID).Scan(&count)
+
+	return count, err
+}
+
+func (s *Storage) VoiceTimeSeconds(userID string) (int64, error) {
+	var seconds int64
+	err := s.DB.QueryRow(`
+		SELECT COALESCE(SUM(
+			(strftime('%s', left_at) - strftime('%s', joined_at))
+		), 0)
+		FROM voice_sessions
+		WHERE user_id = ?
+		  AND left_at IS NOT NULL
+	`, userID).Scan(&seconds)
+
+	return seconds, err
+}
+
+func (s *Storage) GameSessionsCount(userID string) (int, error) {
+	var count int
+	err := s.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM game_activity
+		WHERE user_id = ?
+	`, userID).Scan(&count)
+
+	return count, err
+}
+
+func (s *Storage) FirstSeen(userID string) (time.Time, error) {
+	var ts string
+	err := s.DB.QueryRow(`
+		SELECT MIN(created_at)
+		FROM messages
+		WHERE user_id = ?
+	`, userID).Scan(&ts)
+
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return time.Parse(time.RFC3339, ts)
 }
