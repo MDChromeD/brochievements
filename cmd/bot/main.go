@@ -88,6 +88,10 @@ func main() {
 		}
 	})
 
+	if err = dg.Open(); err != nil {
+		log.Fatal("error opening connection:", err)
+	}
+
 	for _, cmd := range commands {
 		_, err := dg.ApplicationCommandCreate(
 			dg.State.User.ID,
@@ -97,10 +101,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("Cannot create command %q: %v", cmd.Name, err)
 		}
-	}
-
-	if err = dg.Open(); err != nil {
-		log.Fatal("error opening connection:", err)
 	}
 
 	log.Println("Brochievements bot is running. Press CTRL-C to exit.")
