@@ -43,7 +43,14 @@ func New(path string) *Storage {
 	game TEXT,
 	seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
-	`
+	CREATE TABLE IF NOT EXISTS game_sessions (
+  	id INTEGER PRIMARY KEY AUTOINCREMENT,
+  	user_id TEXT NOT NULL,
+  	username TEXT NOT NULL,
+  	game TEXT NOT NULL,
+  	started_at DATETIME NOT NULL,
+  	ended_at DATETIME
+	);`
 
 	if _, err := db.Exec(query); err != nil {
 		log.Fatal(err)

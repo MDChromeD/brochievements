@@ -47,6 +47,10 @@ func main() {
 		log.Fatal("error creating Discord session:", err)
 	}
 
+	if err := storage.CloseUnfinishedGameSessions(store); err != nil {
+		log.Fatal("failed to close unfinished game sessions:", err)
+	}
+
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "stats",
@@ -66,6 +70,8 @@ func main() {
 	dg.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		handleVoiceState(s, v, store)
 	})
+
+	dg.AddHandler(onPresenceUpdate(store))
 
 	dg.AddHandler(func(
 		s *discordgo.Session,
@@ -90,6 +96,10 @@ func main() {
 
 	if err = dg.Open(); err != nil {
 		log.Fatal("error opening connection:", err)
+	}
+
+	if err := closeUnfinishedGameSessions(store); err != nil {
+		log.Fatal(err)
 	}
 
 	for _, cmd := range commands {
@@ -125,6 +135,15 @@ func main() {
 	<-stop
 
 	dg.Close()
+}
+
+func extractGame(p *discordgo.Presence) string {
+	for _, a := range p.Activities {
+		if a.Type == discordgo.ActivityTypeGame {
+			return a.Name
+		}
+	}
+	return ""
 }
 
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate, store *storage.Storage) {
@@ -328,4 +347,65 @@ func handleStats(
 			Embeds: []*discordgo.MessageEmbed{embed},
 		},
 	})
+}
+
+func closeUnfinishedGameSessions(store *storage.Storage) error {
+	_, err := store.DB.Exec(`
+		UPDATE game_sessions
+		SET ended_at = CURRENT_TIMESTAMP
+		WHERE ended_at IS NULL
+	`)
+	return err
+}
+
+func onPresenceUpdate(store *storage.Storage) func(*discordgo.Session, *discordgo.PresenceUpdate) {
+	return func(s *discordgo.Session, p *discordgo.PresenceUpdate) {
+
+		if p.User == nil {
+			return
+		}
+
+		userID := p.User.ID
+		username := p.User.Username
+		newGame := extractGame(&p.Presence)
+
+		current, exists := storage.ActiveGameSessions[userID]
+
+		// ❌ не играл и не играет
+		if !exists && newGame == "" {
+			return
+		}
+
+		// ▶️ начал играть
+		if !exists && newGame != "" {
+			id, err := storage.StartGameSession(store.DB, userID, username, newGame)
+			if err == nil {
+				storage.ActiveGameSessions[userID] = storage.CurrentGameSession{
+					SessionID: id,
+					Game:      newGame,
+				}
+			}
+			return
+		}
+
+		// ⏹ перестал играть
+		if exists && newGame == "" {
+			_ = storage.EndGameSession(store.DB, current.SessionID)
+			delete(storage.ActiveGameSessions, userID)
+			return
+		}
+
+		// 🔄 сменил игру
+		if exists && newGame != current.Game {
+			_ = storage.EndGameSession(store.DB, current.SessionID)
+
+			id, err := storage.StartGameSession(store.DB, userID, username, newGame)
+			if err == nil {
+				storage.ActiveGameSessions[userID] = storage.CurrentGameSession{
+					SessionID: id,
+					Game:      newGame,
+				}
+			}
+		}
+	}
 }
