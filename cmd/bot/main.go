@@ -172,18 +172,31 @@ func handleVoiceState(
 
 	if v.Member != nil && v.Member.User != nil {
 		username = v.Member.User.Username
+		store.UpsertUser(userID, username)
 	}
 
-	// Пользователь зашёл в voice
+	// 🔊 JOIN: не было канала → появился
 	if v.BeforeUpdate == nil && v.ChannelID != "" {
-		log.Println("Voice join:", username)
+		log.Println("Voice join:", username, userID)
 		store.StartVoiceSession(userID, username, v.ChannelID)
 		return
 	}
 
-	// Пользователь вышел из voice
-	if v.ChannelID == "" {
-		log.Println("Voice leave:", username)
+	// 🔄 MOVE: был канал → другой канал
+	if v.BeforeUpdate != nil &&
+		v.BeforeUpdate.ChannelID != "" &&
+		v.ChannelID != "" &&
+		v.BeforeUpdate.ChannelID != v.ChannelID {
+
+		log.Println("Voice move:", username, userID)
+		store.EndVoiceSession(userID)
+		store.StartVoiceSession(userID, username, v.ChannelID)
+		return
+	}
+
+	// 🔇 LEAVE: был канал → пусто
+	if v.BeforeUpdate != nil && v.ChannelID == "" {
+		log.Println("Voice leave:", username, userID)
 		store.EndVoiceSession(userID)
 		return
 	}

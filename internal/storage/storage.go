@@ -147,14 +147,21 @@ type GameStat struct {
 	Count    int
 }
 
-func (s *Storage) UpsertUser(userID, username string) {
-	_, _ = s.DB.Exec(`
+func (s *Storage) UpsertUser(userID, username string) error {
+	if username == "" {
+		return nil
+	}
+
+	_, err := s.DB.Exec(`
 		INSERT INTO users (user_id, username, updated_at)
 		VALUES (?, ?, CURRENT_TIMESTAMP)
-		ON CONFLICT(user_id) DO UPDATE SET
+		ON CONFLICT(user_id)
+		DO UPDATE SET
 			username = excluded.username,
 			updated_at = CURRENT_TIMESTAMP
 	`, userID, username)
+
+	return err
 }
 
 func (s *Storage) TopVoiceJoinsLastWeek() (*VoiceJoinStat, error) {
