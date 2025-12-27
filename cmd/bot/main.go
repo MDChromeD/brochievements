@@ -75,13 +75,6 @@ func main() {
 
 	dg.AddHandler(func(
 		s *discordgo.Session,
-		p *discordgo.PresenceUpdate,
-	) {
-		handlePresence(s, p, store)
-	})
-
-	dg.AddHandler(func(
-		s *discordgo.Session,
 		i *discordgo.InteractionCreate,
 	) {
 		if i.Type != discordgo.InteractionApplicationCommand {
@@ -225,13 +218,6 @@ func publishWeeklyAchievements(
 		)
 	}
 
-	if stat, err := store.TopGameLastWeek(); err == nil {
-		achievementsList = append(
-			achievementsList,
-			achievements.GameFan(stat),
-		)
-	}
-
 	if len(achievementsList) == 0 {
 		log.Println("No achievements to publish")
 		return
@@ -265,38 +251,6 @@ func publishWeeklyAchievements(
 	}
 }
 
-func handlePresence(
-	s *discordgo.Session,
-	p *discordgo.PresenceUpdate,
-	store *storage.Storage,
-) {
-	if p.User == nil {
-		return
-	}
-
-	username := p.User.Username
-	userID := p.User.ID
-
-	for _, activity := range p.Activities {
-		if activity.Type == discordgo.ActivityTypeGame && activity.Name != "" {
-			log.Printf(
-				"Game detected: %s is playing %s",
-				username,
-				activity.Name,
-			)
-
-			err := store.SaveGameActivity(
-				userID,
-				username,
-				activity.Name,
-			)
-			if err != nil {
-				log.Println("Game activity save error:", err)
-			}
-		}
-	}
-}
-
 func handleStats(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
@@ -307,7 +261,6 @@ func handleStats(
 
 	msgCount, _ := store.CountMessages(userID)
 	voiceSec, _ := store.VoiceTimeSeconds(userID)
-	gameCount, _ := store.GameSessionsCount(userID)
 	firstSeen, _ := store.FirstSeen(userID)
 
 	voiceHours := float64(voiceSec) / 3600
@@ -327,11 +280,6 @@ func handleStats(
 			{
 				Name:   "🎧 Время в войсе",
 				Value:  fmt.Sprintf("%.2f ч", voiceHours),
-				Inline: true,
-			},
-			{
-				Name:   "🎮 Игровых сессий",
-				Value:  fmt.Sprintf("%d", gameCount),
 				Inline: true,
 			},
 			{

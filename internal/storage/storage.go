@@ -36,13 +36,6 @@ func New(path string) *Storage {
 	joined_at DATETIME,
 	left_at DATETIME
 	);
-	CREATE TABLE IF NOT EXISTS game_activity (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	user_id TEXT,
-	username TEXT,
-	game TEXT,
-	seen_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
 	CREATE TABLE IF NOT EXISTS game_sessions (
   	id INTEGER PRIMARY KEY AUTOINCREMENT,
   	user_id TEXT NOT NULL,
@@ -50,6 +43,11 @@ func New(path string) *Storage {
   	game TEXT NOT NULL,
   	started_at DATETIME NOT NULL,
   	ended_at DATETIME
+	);
+	CREATE TABLE IF NOT EXISTS users (
+    user_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 
 	if _, err := db.Exec(query); err != nil {
@@ -149,6 +147,16 @@ type GameStat struct {
 	Count    int
 }
 
+func (s *Storage) UpsertUser(userID, username string) {
+	_, _ = s.DB.Exec(`
+		INSERT INTO users (user_id, username, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id) DO UPDATE SET
+			username = excluded.username,
+			updated_at = CURRENT_TIMESTAMP
+	`, userID, username)
+}
+
 func (s *Storage) TopVoiceJoinsLastWeek() (*VoiceJoinStat, error) {
 	row := s.DB.QueryRow(`
 		SELECT user_id, username, COUNT(*) as count
@@ -199,36 +207,6 @@ func (s *Storage) LongestVoiceSessionLastWeek() (*LongestVoiceSessionStat, error
 	return &stat, nil
 }
 
-func (s *Storage) SaveGameActivity(
-	userID, username, game string,
-) error {
-	_, err := s.DB.Exec(`
-		INSERT INTO game_activity (user_id, username, game)
-		VALUES (?, ?, ?)
-	`, userID, username, game)
-
-	return err
-}
-
-func (s *Storage) TopGameLastWeek() (*GameStat, error) {
-	row := s.DB.QueryRow(`
-		SELECT username, game, COUNT(*) as count
-		FROM game_activity
-		WHERE seen_at >= datetime('now', '-7 days')
-		GROUP BY username, game
-		ORDER BY count DESC
-		LIMIT 1
-	`)
-
-	var stat GameStat
-	err := row.Scan(&stat.Username, &stat.Game, &stat.Count)
-	if err != nil {
-		return nil, err
-	}
-
-	return &stat, nil
-}
-
 type UserStats struct {
 	MessagesCount int
 	VoiceSeconds  int64
@@ -259,17 +237,6 @@ func (s *Storage) VoiceTimeSeconds(userID string) (int64, error) {
 	`, userID).Scan(&seconds)
 
 	return seconds, err
-}
-
-func (s *Storage) GameSessionsCount(userID string) (int, error) {
-	var count int
-	err := s.DB.QueryRow(`
-		SELECT COUNT(*)
-		FROM game_activity
-		WHERE user_id = ?
-	`, userID).Scan(&count)
-
-	return count, err
 }
 
 func (s *Storage) FirstSeen(userID string) (time.Time, error) {
