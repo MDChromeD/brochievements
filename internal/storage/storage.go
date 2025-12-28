@@ -13,6 +13,11 @@ type Storage struct {
 	DB *sql.DB
 }
 
+type GameSession struct {
+	ID   int64
+	Game string
+}
+
 func New(path string) *Storage {
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
@@ -259,4 +264,24 @@ func (s *Storage) FirstSeen(userID string) (time.Time, error) {
 	}
 
 	return time.Parse(time.RFC3339, ts)
+}
+
+func (s *Storage) GetActiveGameSession(userID string) (*GameSession, error) {
+	row := s.DB.QueryRow(`
+		SELECT id, game
+		FROM game_sessions
+		WHERE user_id = ? AND ended_at IS NULL
+		LIMIT 1
+	`, userID)
+
+	var gs GameSession
+	err := row.Scan(&gs.ID, &gs.Game)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return &gs, nil
 }

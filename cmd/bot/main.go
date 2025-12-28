@@ -47,7 +47,7 @@ func main() {
 		log.Fatal("error creating Discord session:", err)
 	}
 
-	if err := storage.CloseUnfinishedGameSessions(store); err != nil {
+	if err := store.CloseUnfinishedGameSessions(); err != nil {
 		log.Fatal("failed to close unfinished game sessions:", err)
 	}
 
@@ -327,46 +327,19 @@ func onPresenceUpdate(store *storage.Storage) func(*discordgo.Session, *discordg
 		}
 
 		userID := p.User.ID
-		username := p.User.Username
 		newGame := extractGame(&p.Presence)
 
-		current, exists := storage.ActiveGameSessions[userID]
-
-		// ❌ не играл и не играет
-		if !exists && newGame == "" {
-			return
-		}
-
-		// ▶️ начал играть
-		if !exists && newGame != "" {
-			id, err := storage.StartGameSession(store.DB, userID, username, newGame)
-			if err == nil {
-				storage.ActiveGameSessions[userID] = storage.CurrentGameSession{
-					SessionID: id,
-					Game:      newGame,
-				}
+		// ❌ пользователь не играет → закрываем, если было
+		if newGame == "" {
+			active, err := store.GetActiveGameSession(userID)
+			if err != nil || active == nil {
+				return
 			}
+			_ = store.EndGameSession(active.ID)
 			return
 		}
 
-		// ⏹ перестал играть
-		if exists && newGame == "" {
-			_ = storage.EndGameSession(store.DB, current.SessionID)
-			delete(storage.ActiveGameSessions, userID)
-			return
-		}
-
-		// 🔄 сменил игру
-		if exists && newGame != current.Game {
-			_ = storage.EndGameSession(store.DB, current.SessionID)
-
-			id, err := storage.StartGameSession(store.DB, userID, username, newGame)
-			if err == nil {
-				storage.ActiveGameSessions[userID] = storage.CurrentGameSession{
-					SessionID: id,
-					Game:      newGame,
-				}
-			}
-		}
+		// ▶️ пользователь играет → storage сам решит, что делать
+		_ = store.EnsureGameSession(userID, newGame)
 	}
 }
