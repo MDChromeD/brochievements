@@ -42,18 +42,29 @@ func New(path string) *Storage {
 	left_at DATETIME
 	);
 	CREATE TABLE IF NOT EXISTS game_sessions (
-  	id INTEGER PRIMARY KEY AUTOINCREMENT,
-  	user_id TEXT NOT NULL,
-  	username TEXT NOT NULL,
-  	game TEXT NOT NULL,
-  	started_at DATETIME NOT NULL,
-  	ended_at DATETIME
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    game TEXT NOT NULL,
+    started_at DATETIME NOT NULL,
+    ended_at DATETIME
 	);
 	CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);`
+	);
+	CREATE TABLE IF NOT EXISTS voice_channel_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    joined_at DATETIME NOT NULL,
+    left_at DATETIME
+	);
+	CREATE TABLE IF NOT EXISTS voice_channels (
+    channel_id TEXT PRIMARY KEY,
+    channel_name TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
 
 	if _, err := db.Exec(query); err != nil {
 		log.Fatal(err)
@@ -284,4 +295,37 @@ func (s *Storage) GetActiveGameSession(userID string) (*GameSession, error) {
 	}
 
 	return &gs, nil
+}
+
+func (s *Storage) UpsertVoiceChannel(channelID, channelName string) error {
+	if channelID == "" || channelName == "" {
+		return nil
+	}
+
+	_, err := s.DB.Exec(`
+		INSERT INTO voice_channels (channel_id, channel_name, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(channel_id)
+		DO UPDATE SET
+			channel_name = excluded.channel_name,
+			updated_at = CURRENT_TIMESTAMP
+	`, channelID, channelName)
+
+	return err
+}
+
+func (s *Storage) GetVoiceChannelName(channelID string) (string, bool) {
+	row := s.DB.QueryRow(`
+		SELECT channel_name
+		FROM voice_channels
+		WHERE channel_id = ?
+	`, channelID)
+
+	var name string
+	err := row.Scan(&name)
+	if err != nil {
+		return "", false
+	}
+
+	return name, true
 }

@@ -132,7 +132,14 @@ func main() {
 
 func extractGame(p *discordgo.Presence) string {
 	for _, a := range p.Activities {
-		if a.Type == discordgo.ActivityTypeGame {
+		log.Printf(
+			"[presence] activity: type=%v name=%q applicationID=%q",
+			a.Type,
+			a.Name,
+			a.ApplicationID,
+		)
+
+		if a.Name != "" {
 			return a.Name
 		}
 	}
@@ -175,10 +182,22 @@ func handleVoiceState(
 		store.UpsertUser(userID, username)
 	}
 
+	if v.ChannelID != "" {
+		ch, err := s.Channel(v.ChannelID)
+		if err == nil {
+			store.UpsertVoiceChannel(ch.ID, ch.Name)
+		}
+	}
+
 	// 🔊 JOIN: не было канала → появился
 	if v.BeforeUpdate == nil && v.ChannelID != "" {
-		log.Println("Voice join:", username, userID)
+		log.Println("Voice join:", username, userID, "channel", v.ChannelID)
+
 		store.StartVoiceSession(userID, username, v.ChannelID)
+
+		if err := store.EnsureVoiceChannelSession(userID, v.ChannelID); err != nil {
+			log.Println("EnsureVoiceChannelSession error:", err)
+		}
 		return
 	}
 
@@ -188,15 +207,26 @@ func handleVoiceState(
 		v.ChannelID != "" &&
 		v.BeforeUpdate.ChannelID != v.ChannelID {
 
-		log.Println("Voice move:", username, userID)
-		store.EndVoiceSession(userID)
-		store.StartVoiceSession(userID, username, v.ChannelID)
+		log.Println("Voice move:", username, userID,
+			v.BeforeUpdate.ChannelID, "→", v.ChannelID)
+
+		if err := store.EnsureVoiceChannelSession(userID, v.ChannelID); err != nil {
+			log.Println("EnsureVoiceChannelSession error:", err)
+		}
 		return
 	}
 
 	// 🔇 LEAVE: был канал → пусто
 	if v.BeforeUpdate != nil && v.ChannelID == "" {
 		log.Println("Voice leave:", username, userID)
+
+		// закрываем channel-сессию
+		active, err := store.GetActiveVoiceChannelSession(userID)
+		if err == nil && active != nil {
+			_ = store.EndVoiceChannelSession(active.ID)
+		}
+
+		// закрываем общую voice-сессию
 		store.EndVoiceSession(userID)
 		return
 	}
@@ -274,8 +304,6 @@ func handleStats(
 
 	msgCount, _ := store.CountMessages(userID)
 	voiceSec, _ := store.VoiceTimeSeconds(userID)
-	firstSeen, _ := store.FirstSeen(userID)
-
 	voiceHours := float64(voiceSec) / 3600
 
 	embed := &discordgo.MessageEmbed{
@@ -294,10 +322,6 @@ func handleStats(
 				Name:   "🎧 Время в войсе",
 				Value:  fmt.Sprintf("%.2f ч", voiceHours),
 				Inline: true,
-			},
-			{
-				Name:  "🗓 Первый раз замечен",
-				Value: firstSeen.Format("02.01.2006"),
 			},
 		},
 	}
@@ -322,6 +346,17 @@ func closeUnfinishedGameSessions(store *storage.Storage) error {
 func onPresenceUpdate(store *storage.Storage) func(*discordgo.Session, *discordgo.PresenceUpdate) {
 	return func(s *discordgo.Session, p *discordgo.PresenceUpdate) {
 
+		log.Printf("[presence] event: user=%v guild=%v activities=%d",
+			func() string {
+				if p.User != nil {
+					return p.User.ID
+				}
+				return "<nil>"
+			}(),
+			p.GuildID,
+			len(p.Activities),
+		)
+
 		if p.User == nil {
 			return
 		}
@@ -340,6 +375,11 @@ func onPresenceUpdate(store *storage.Storage) func(*discordgo.Session, *discordg
 		}
 
 		// ▶️ пользователь играет → storage сам решит, что делать
-		_ = store.EnsureGameSession(userID, newGame)
+		if err := store.EnsureGameSession(userID, newGame); err != nil {
+			log.Println("[presence] EnsureGameSession error:", err)
+		} else {
+			log.Println("[presence] EnsureGameSession OK:", userID, newGame)
+		}
+
 	}
 }
