@@ -177,9 +177,13 @@ func handleVoiceState(
 	userID := v.UserID
 	username := ""
 
-	if v.Member != nil && v.Member.User != nil {
-		username = v.Member.User.Username
-		store.UpsertUser(userID, username)
+	if v.Member != nil {
+		joinedAt := v.Member.JoinedAt
+		store.UpsertUser(
+			userID,
+			username,
+			&joinedAt,
+		)
 	}
 
 	if v.ChannelID != "" {
@@ -302,36 +306,101 @@ func handleStats(
 	user := i.Member.User
 	userID := user.ID
 
-	msgCount, _ := store.CountMessages(userID)
-	voiceSec, _ := store.VoiceTimeSeconds(userID)
-	voiceHours := float64(voiceSec) / 3600
+	stats, err := store.GetUserStats(userID)
+	if err != nil {
+		log.Println("GetUserStats error:", err)
+		return
+	}
+
+	// --- Форматирование времени ---
+	voiceHours := float64(stats.VoiceSeconds) / 3600
+	gameHours := float64(stats.GameSeconds) / 3600
+	favChanHours := float64(stats.FavoriteChannelSec) / 3600
+	favGameHours := float64(stats.FavoriteGameSec) / 3600
+
+	// --- Безопасные фолбэки ---
+	favChannel := "—"
+	if stats.FavoriteChannel != "" {
+		favChannel = fmt.Sprintf(
+			"%s (%.1f ч)",
+			stats.FavoriteChannel,
+			favChanHours,
+		)
+	}
+
+	favGame := "—"
+	if stats.FavoriteGame != "" {
+		favGame = fmt.Sprintf(
+			"%s (%.1f ч)",
+			stats.FavoriteGame,
+			favGameHours,
+		)
+	}
+
+	joinedText := "—"
+	if stats.JoinedAt != "" {
+		if t, err := time.Parse(time.RFC3339, stats.JoinedAt); err == nil {
+			joinedText = t.Format("02.01.2006")
+		}
+	}
 
 	embed := &discordgo.MessageEmbed{
-		Title: "📊 Статистика пользователя",
+		Title: fmt.Sprintf("📊 Статистика: %s", user.Username),
 		Color: 0x5865F2,
 		Thumbnail: &discordgo.MessageEmbedThumbnail{
 			URL: user.AvatarURL(""),
 		},
 		Fields: []*discordgo.MessageEmbedField{
 			{
-				Name:   "💬 Сообщений",
-				Value:  fmt.Sprintf("%d", msgCount),
+				Name:   "💬 Сообщения",
+				Value:  fmt.Sprintf("%d", stats.MessagesCount),
 				Inline: true,
 			},
 			{
-				Name:   "🎧 Время в войсе",
-				Value:  fmt.Sprintf("%.2f ч", voiceHours),
+				Name:   "🗓 На сервере с",
+				Value:  joinedText,
 				Inline: true,
+			},
+			{
+				Name: "🎧 Voice",
+				Value: fmt.Sprintf(
+					"⏱ Всего: %.1f ч\n"+
+						"🔊 Любимый канал: %s\n"+
+						"🔁 Входов: %d",
+					voiceHours,
+					favChannel,
+					stats.VoiceJoins,
+				),
+				Inline: false,
+			},
+			{
+				Name: "🎮 Игры",
+				Value: fmt.Sprintf(
+					"⏱ Всего: %.1f ч\n"+
+						"🎯 Любимая игра: %s\n"+
+						"🔄 Смен игр: %d",
+					gameHours,
+					favGame,
+					stats.GameSwitches,
+				),
+				Inline: false,
 			},
 		},
 	}
 
-	_ = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Embeds: []*discordgo.MessageEmbed{embed},
+	err = s.InteractionRespond(
+		i.Interaction,
+		&discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Embeds: []*discordgo.MessageEmbed{embed},
+			},
 		},
-	})
+	)
+
+	if err != nil {
+		log.Println("InteractionRespond error:", err)
+	}
 }
 
 func closeUnfinishedGameSessions(store *storage.Storage) error {

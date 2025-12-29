@@ -51,6 +51,7 @@ func New(path string) *Storage {
 	CREATE TABLE IF NOT EXISTS users (
     user_id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
+	joined_at DATETIME,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	CREATE TABLE IF NOT EXISTS voice_channel_sessions (
@@ -163,19 +164,25 @@ type GameStat struct {
 	Count    int
 }
 
-func (s *Storage) UpsertUser(userID, username string) error {
-	if username == "" {
+func (s *Storage) UpsertUser(
+	userID string,
+	username string,
+	joinedAt *time.Time,
+) error {
+
+	if userID == "" {
 		return nil
 	}
 
 	_, err := s.DB.Exec(`
-		INSERT INTO users (user_id, username, updated_at)
-		VALUES (?, ?, CURRENT_TIMESTAMP)
+		INSERT INTO users (user_id, username, joined_at, updated_at)
+		VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 		ON CONFLICT(user_id)
 		DO UPDATE SET
 			username = excluded.username,
-			updated_at = CURRENT_TIMESTAMP
-	`, userID, username)
+			updated_at = CURRENT_TIMESTAMP,
+			joined_at = COALESCE(users.joined_at, excluded.joined_at)
+	`, userID, username, joinedAt)
 
 	return err
 }
@@ -230,13 +237,6 @@ func (s *Storage) LongestVoiceSessionLastWeek() (*LongestVoiceSessionStat, error
 	return &stat, nil
 }
 
-type UserStats struct {
-	MessagesCount int
-	VoiceSeconds  int64
-	GamesCount    int
-	FirstSeen     time.Time
-}
-
 func (s *Storage) CountMessages(userID string) (int, error) {
 	var count int
 	err := s.DB.QueryRow(`
@@ -262,21 +262,6 @@ func (s *Storage) VoiceTimeSeconds(userID string) (int64, error) {
 	return seconds, err
 }
 
-func (s *Storage) FirstSeen(userID string) (time.Time, error) {
-	var ts string
-	err := s.DB.QueryRow(`
-		SELECT MIN(created_at)
-		FROM messages
-		WHERE user_id = ?
-	`, userID).Scan(&ts)
-
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return time.Parse(time.RFC3339, ts)
-}
-
 func (s *Storage) GetActiveGameSession(userID string) (*GameSession, error) {
 	row := s.DB.QueryRow(`
 		SELECT id, game
@@ -295,6 +280,63 @@ func (s *Storage) GetActiveGameSession(userID string) (*GameSession, error) {
 	}
 
 	return &gs, nil
+}
+
+func (s *Storage) fillMessageStats(userID string, stats *UserStats) {
+	s.DB.QueryRow(
+		`SELECT COUNT(*) FROM messages WHERE user_id = ?`,
+		userID,
+	).Scan(&stats.MessagesCount)
+
+	s.DB.QueryRow(
+		`SELECT joined_at FROM users WHERE user_id = ?`,
+		userID,
+	).Scan(&stats.JoinedAt)
+}
+
+func (s *Storage) fillVoiceStats(userID string, stats *UserStats) {
+	s.DB.QueryRow(`
+		SELECT 
+			IFNULL(SUM(strftime('%s', left_at) - strftime('%s', joined_at)), 0),
+			COUNT(*)
+		FROM voice_sessions
+		WHERE user_id = ? AND left_at IS NOT NULL
+	`, userID).Scan(&stats.VoiceSeconds, &stats.VoiceJoins)
+}
+
+func (s *Storage) fillFavoriteChannel(userID string, stats *UserStats) {
+	s.DB.QueryRow(`
+		SELECT vc.channel_name,
+		       SUM(strftime('%s', vcs.left_at) - strftime('%s', vcs.joined_at)) AS seconds
+		FROM voice_channel_sessions vcs
+		JOIN voice_channels vc ON vc.channel_id = vcs.channel_id
+		WHERE vcs.user_id = ? AND vcs.left_at IS NOT NULL
+		GROUP BY vcs.channel_id
+		ORDER BY seconds DESC
+		LIMIT 1
+	`, userID).Scan(&stats.FavoriteChannel, &stats.FavoriteChannelSec)
+}
+
+func (s *Storage) fillGameStats(userID string, stats *UserStats) {
+	s.DB.QueryRow(`
+		SELECT IFNULL(SUM(strftime('%s', ended_at) - strftime('%s', started_at)), 0)
+		FROM game_sessions
+		WHERE user_id = ? AND ended_at IS NOT NULL
+	`, userID).Scan(&stats.GameSeconds)
+
+	s.DB.QueryRow(`
+		SELECT game,
+		       SUM(strftime('%s', ended_at) - strftime('%s', started_at)) AS seconds
+		FROM game_sessions
+		WHERE user_id = ? AND ended_at IS NOT NULL
+		GROUP BY game
+		ORDER BY seconds DESC
+		LIMIT 1
+	`, userID).Scan(&stats.FavoriteGame, &stats.FavoriteGameSec)
+
+	s.DB.QueryRow(`
+		SELECT COUNT(*) FROM game_sessions WHERE user_id = ?
+	`, userID).Scan(&stats.GameSwitches)
 }
 
 func (s *Storage) UpsertVoiceChannel(channelID, channelName string) error {
