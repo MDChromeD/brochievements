@@ -127,31 +127,6 @@ type VoiceTimeStat struct {
 	Seconds  int
 }
 
-func (s *Storage) TopVoiceUserLastWeek() (*VoiceTimeStat, error) {
-	row := s.DB.QueryRow(`
-		SELECT
-			user_id,
-			username,
-			SUM(
-				strftime('%s', COALESCE(left_at, datetime('now')))
-				- strftime('%s', joined_at)
-			) as seconds
-		FROM voice_sessions
-		WHERE joined_at >= datetime('now', '-7 days')
-		GROUP BY user_id, username
-		ORDER BY seconds DESC
-		LIMIT 1
-	`)
-
-	var stat VoiceTimeStat
-	err := row.Scan(&stat.UserID, &stat.Username, &stat.Seconds)
-	if err != nil {
-		return nil, err
-	}
-
-	return &stat, nil
-}
-
 type VoiceJoinStat struct {
 	UserID   string
 	Username string
@@ -187,65 +162,10 @@ func (s *Storage) UpsertUser(
 	return err
 }
 
-func (s *Storage) TopVoiceJoinsLastWeek() (*VoiceJoinStat, error) {
-	row := s.DB.QueryRow(`
-		SELECT user_id, username, COUNT(*) as count
-		FROM voice_sessions
-		WHERE joined_at >= datetime('now', '-7 days')
-		GROUP BY user_id, username
-		ORDER BY count DESC
-		LIMIT 1
-	`)
-
-	var stat VoiceJoinStat
-	err := row.Scan(&stat.UserID, &stat.Username, &stat.Count)
-	if err != nil {
-		return nil, err
-	}
-
-	return &stat, nil
-}
-
 type LongestVoiceSessionStat struct {
 	UserID   string
 	Username string
 	Seconds  int
-}
-
-func (s *Storage) LongestVoiceSessionLastWeek() (*LongestVoiceSessionStat, error) {
-	row := s.DB.QueryRow(`
-		SELECT
-			user_id,
-			username,
-			MAX(
-				strftime('%s', COALESCE(left_at, datetime('now')))
-				- strftime('%s', joined_at)
-			) AS seconds
-		FROM voice_sessions
-		WHERE joined_at >= datetime('now', '-7 days')
-		GROUP BY user_id, username
-		ORDER BY seconds DESC
-		LIMIT 1
-	`)
-
-	var stat LongestVoiceSessionStat
-	err := row.Scan(&stat.UserID, &stat.Username, &stat.Seconds)
-	if err != nil {
-		return nil, err
-	}
-
-	return &stat, nil
-}
-
-func (s *Storage) CountMessages(userID string) (int, error) {
-	var count int
-	err := s.DB.QueryRow(`
-		SELECT COUNT(*)
-		FROM messages
-		WHERE user_id = ?
-	`, userID).Scan(&count)
-
-	return count, err
 }
 
 func (s *Storage) VoiceTimeSeconds(userID string) (int64, error) {

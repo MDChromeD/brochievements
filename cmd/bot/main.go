@@ -2,13 +2,11 @@ package main
 
 import (
 	"brochievements/internal/achievements"
-	"brochievements/internal/ai"
 	"brochievements/internal/storage"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -33,13 +31,6 @@ func main() {
 	channelID := os.Getenv("ACHIEVEMENTS_CHANNEL_ID")
 	if channelID == "" {
 		log.Fatal("ACHIEVEMENTS_CHANNEL_ID not set")
-	}
-
-	aiGen, err := ai.NewOpenAIGenerator()
-	if err != nil {
-		log.Println("AI disabled:", err)
-	} else {
-		log.Println("AI enabled")
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -108,20 +99,17 @@ func main() {
 
 	log.Println("Brochievements bot is running. Press CTRL-C to exit.")
 
+	// ------ удалить
+	// ===== WEEKLY DEBUG RUN (ONE-TIME) =====
 	go func() {
-		ticker := time.NewTicker(30 * time.Hour)
-		defer ticker.Stop()
 
-		log.Println("Weekly achievements scheduler started")
-
-		// 🔹 Опционально: первый запуск сразу
-		//publishWeeklyAchievements(dg, store, channelID)
-
-		for {
-			<-ticker.C
-			publishWeeklyAchievements(dg, store, channelID, aiGen)
-		}
+		achievements.PublishWeeklyDebug(
+			dg,    // *discordgo.Session
+			store, // *storage.Storage
+			channelID,
+		)
 	}()
+	// ------ удалить
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -175,15 +163,39 @@ func handleVoiceState(
 	store *storage.Storage,
 ) {
 	userID := v.UserID
-	username := ""
+	if v.Member == nil || v.Member.User == nil {
+		log.Println("[voice][user] Member or User is nil, skipping UpsertUser")
+		return
+	}
 
-	if v.Member != nil {
-		joinedAt := v.Member.JoinedAt
-		store.UpsertUser(
-			userID,
-			username,
-			&joinedAt,
-		)
+	var username string
+
+	// 1️⃣ Ник на сервере
+	if v.Member.Nick != "" {
+		username = v.Member.Nick
+	} else if v.Member.User.GlobalName != "" {
+		// 2️⃣ Глобальное отображаемое имя
+		username = v.Member.User.GlobalName
+	} else {
+		// 3️⃣ Фолбэк — старый username
+		username = v.Member.User.Username
+	}
+
+	joinedAt := v.Member.JoinedAt
+
+	log.Printf(
+		"[voice][user] UpsertUser: userID=%s username=%q joinedAt=%v",
+		userID,
+		username,
+		joinedAt,
+	)
+
+	if err := store.UpsertUser(
+		userID,
+		username,
+		&joinedAt,
+	); err != nil {
+		log.Println("[voice][user] UpsertUser ERROR:", err)
 	}
 
 	if v.ChannelID != "" {
@@ -233,68 +245,6 @@ func handleVoiceState(
 		// закрываем общую voice-сессию
 		store.EndVoiceSession(userID)
 		return
-	}
-}
-
-func publishWeeklyAchievements(
-	dg *discordgo.Session,
-	store *storage.Storage,
-	channelID string,
-	aiGen ai.Generator,
-) {
-	var achievementsList []achievements.Achievement
-
-	if stat, err := store.TopVoiceUserLastWeek(); err == nil {
-		achievementsList = append(
-			achievementsList,
-			achievements.VoiceMaster(stat),
-		)
-	}
-
-	if stat, err := store.TopVoiceJoinsLastWeek(); err == nil {
-		achievementsList = append(
-			achievementsList,
-			achievements.FrequentVisitor(stat),
-		)
-	}
-
-	if stat, err := store.LongestVoiceSessionLastWeek(); err == nil {
-		achievementsList = append(
-			achievementsList,
-			achievements.Marathoner(stat),
-		)
-	}
-
-	if len(achievementsList) == 0 {
-		log.Println("No achievements to publish")
-		return
-	}
-
-	var message strings.Builder
-	message.WriteString("🏆 **Итоги недели**\n\n")
-
-	for _, ach := range achievementsList {
-		description := ach.Description
-
-		// 🧠 Если ИИ доступен — улучшаем текст
-		if aiGen != nil {
-			if text, err := aiGen.Generate(ach.Prompt()); err == nil {
-				description = text
-			}
-		}
-
-		message.WriteString(fmt.Sprintf(
-			"**%s**\n%s\n\n",
-			ach.Title,
-			description,
-		))
-	}
-
-	_, err := dg.ChannelMessageSend(channelID, message.String())
-	if err != nil {
-		log.Println("Failed to post achievements:", err)
-	} else {
-		log.Println("Weekly achievements posted")
 	}
 }
 
