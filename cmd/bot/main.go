@@ -2,6 +2,7 @@ package main
 
 import (
 	"brochievements/internal/achievements"
+	"brochievements/internal/ai"
 	"brochievements/internal/storage"
 	"fmt"
 	"log"
@@ -24,6 +25,14 @@ func main() {
 		log.Println("No .env file found")
 	}
 
+	generator, err := ai.NewOpenAIGenerator()
+	if err != nil {
+		log.Println("[AI] disabled:", err)
+		generator = nil
+	} else {
+		log.Println("[AI] enabled")
+	}
+
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
 		log.Fatal("DISCORD_TOKEN not set")
@@ -31,6 +40,11 @@ func main() {
 	channelID := os.Getenv("ACHIEVEMENTS_CHANNEL_ID")
 	if channelID == "" {
 		log.Fatal("ACHIEVEMENTS_CHANNEL_ID not set")
+	}
+
+	guildID := os.Getenv("GUILD_ID")
+	if guildID == "" {
+		log.Fatal("GUILD_ID is not set")
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -55,14 +69,28 @@ func main() {
 		discordgo.IntentGuildPresences
 
 	dg.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
+		if m.GuildID == "" {
+			return
+		}
+
+		// ignore other servers
+		if m.GuildID != guildID {
+			return
+		}
+
 		messageCreate(s, m, store)
 	})
 
 	dg.AddHandler(func(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+
+		if v.GuildID != guildID {
+			return
+		}
+
 		handleVoiceState(s, v, store)
 	})
 
-	dg.AddHandler(onPresenceUpdate(store))
+	dg.AddHandler(onPresenceUpdate(store, guildID))
 
 	dg.AddHandler(func(
 		s *discordgo.Session,
@@ -101,12 +129,14 @@ func main() {
 
 	// ------ удалить
 	// ===== WEEKLY DEBUG RUN (ONE-TIME) =====
+
 	go func() {
 
 		achievements.PublishWeeklyDebug(
 			dg,    // *discordgo.Session
 			store, // *storage.Storage
 			channelID,
+			generator,
 		)
 	}()
 	// ------ удалить
@@ -362,8 +392,12 @@ func closeUnfinishedGameSessions(store *storage.Storage) error {
 	return err
 }
 
-func onPresenceUpdate(store *storage.Storage) func(*discordgo.Session, *discordgo.PresenceUpdate) {
+func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Session, *discordgo.PresenceUpdate) {
 	return func(s *discordgo.Session, p *discordgo.PresenceUpdate) {
+
+		if p.GuildID != guildID {
+			return
+		}
 
 		log.Printf("[presence] event: user=%v guild=%v activities=%d",
 			func() string {

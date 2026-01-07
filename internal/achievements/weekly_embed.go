@@ -21,7 +21,7 @@ func sendWeeklyEmbed(
 	}
 
 	var winners []string
-	var shamed []string
+	// var shamed []string
 
 	for _, a := range achs {
 		line := fmt.Sprintf(
@@ -32,14 +32,14 @@ func sendWeeklyEmbed(
 		)
 
 		// грубое, но рабочее разделение
-		if a.Code == "ghost" ||
-			a.Code == "afk_life" ||
-			a.Code == "just_looking" ||
-			a.Code == "launched_and_left" {
-			shamed = append(shamed, line)
-		} else {
-			winners = append(winners, line)
-		}
+		// if a.Code == "ghost" ||
+		// 	a.Code == "afk_life" ||
+		// 	a.Code == "just_looking" ||
+		// 	a.Code == "launched_and_left" {
+		// 	shamed = append(shamed, line)
+		// } else {
+		winners = append(winners, line)
+		// }
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -50,10 +50,10 @@ func sendWeeklyEmbed(
 				Name:  "🏆 Достижения",
 				Value: joinOrEmpty(winners),
 			},
-			{
-				Name:  "💀 Антиачивки",
-				Value: joinOrEmpty(shamed),
-			},
+			// {
+			// 	Name:  "💀 Антиачивки",
+			// 	Value: joinOrEmpty(shamed),
+			// },
 		},
 	}
 

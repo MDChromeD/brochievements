@@ -9,17 +9,17 @@ func PortWhore(stats []WeeklyUserStats) *WeeklyAchievement {
 		s := &stats[i]
 
 		// игнорим тех, кто вообще не играл
-		if s.GameSessionsCount == 0 {
+		if s.DistinctGames == 0 {
 			continue
 		}
 
-		if winner == nil || s.GameSessionsCount > winner.GameSessionsCount {
+		if winner == nil || s.DistinctGames > winner.DistinctGames {
 			winner = s
 		}
 	}
 
 	// никто не заслужил
-	if winner == nil || winner.GameSessionsCount < 2 {
+	if winner == nil || winner.DistinctGames < 2 {
 		return nil
 	}
 
@@ -29,6 +29,6 @@ func PortWhore(stats []WeeklyUserStats) *WeeklyAchievement {
 		Description: "Менял игры чаще всех за неделю",
 		UserID:      winner.UserID,
 		Username:    winner.Username,
-		Value:       fmt.Sprintf("%d смен игр", winner.GameSessionsCount),
+		Value:       fmt.Sprintf("%d смен игр", winner.DistinctGames),
 	}
 }

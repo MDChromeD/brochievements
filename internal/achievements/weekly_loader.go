@@ -39,7 +39,7 @@ func LoadWeeklyStats(store *storage.Storage) ([]WeeklyUserStats, error) {
 			ON gs.user_id = u.user_id
 			AND gs.started_at >= ?
 			AND gs.ended_at IS NOT NULL
-
+			AND gs.game != 'Custom Status'
 		GROUP BY u.user_id
 	`, to, from)
 
@@ -118,6 +118,7 @@ func LoadWeeklyMaxGame(store *storage.Storage, stats []WeeklyUserStats) error {
 		FROM game_sessions
 		WHERE started_at >= ?
 		  AND ended_at IS NOT NULL
+		  AND game != 'Custom Status'
 		GROUP BY user_id, game
 	`, from)
 
