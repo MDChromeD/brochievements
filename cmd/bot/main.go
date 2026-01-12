@@ -4,10 +4,13 @@ import (
 	"brochievements/internal/achievements"
 	"brochievements/internal/ai"
 	"brochievements/internal/storage"
+	"brochievements/internal/version"
+	"flag"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +19,14 @@ import (
 )
 
 func main() {
+
+	showVersion := flag.Bool("version", false, "print version")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.Version)
+		os.Exit(0)
+	}
 
 	store := storage.New("brochievements.db")
 	defer store.DB.Close()
@@ -132,7 +143,10 @@ func main() {
 		}
 	}
 
+	log.Println("Starting Brochievements", version.Version)
 	log.Println("Brochievements bot is running. Press CTRL-C to exit.")
+
+	notifyIfUpdated(dg)
 
 	// ------ удалить
 	// ===== WEEKLY DEBUG RUN (ONE-TIME) =====
@@ -491,4 +505,38 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 		}
 
 	}
+}
+
+const (
+	versionFile        = "/opt/brochievements/.version"
+	versionChangedFile = "/opt/brochievements/.version_changed"
+)
+
+func notifyIfUpdated(s *discordgo.Session) {
+	if _, err := os.Stat(versionChangedFile); err != nil {
+		return // версия не менялась
+	}
+
+	data, err := os.ReadFile(versionFile)
+	if err != nil {
+		log.Println("cannot read version:", err)
+		return
+	}
+	version := strings.TrimSpace(string(data))
+
+	channelID := os.Getenv("ACHIEVEMENTS_CHANNEL_ID")
+	if channelID == "" {
+		log.Println("ACHIEVEMENTS_CHANNEL_ID is not set")
+		return
+	}
+
+	msg := fmt.Sprintf("🚀 **Бот обновлён до версии `%s`**", version)
+	_, err = s.ChannelMessageSend(channelID, msg)
+	if err != nil {
+		log.Println("failed to send deploy message:", err)
+		return
+	}
+
+	// важно: чтобы не спамить при рестартах
+	_ = os.Remove(versionChangedFile)
 }
