@@ -4,7 +4,7 @@ import (
 	"database/sql"
 )
 
-// ---------- STREAM SESSIONS ----------
+// -- STREAM SESSIONS --
 
 func (s *Storage) StartStreamSession(userID, username, channelID string) error {
 	// защита от дублей: если уже есть активный стрим — ничего не делаем
