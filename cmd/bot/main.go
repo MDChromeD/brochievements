@@ -56,6 +56,13 @@ func main() {
 		log.Fatal("failed to close unfinished game sessions:", err)
 	}
 
+	if err := store.CloseUnfinishedStreamSessions(); err != nil {
+		log.Fatal("failed to close unfinished stream sessions:", err)
+	}
+	if err := store.CloseUnfinishedStreamViews(); err != nil {
+		log.Fatal("failed to close unfinished stream views:", err)
+	}
+
 	commands := []*discordgo.ApplicationCommand{
 		{
 			Name:        "stats",
@@ -234,6 +241,55 @@ func handleVoiceState(
 			store.UpsertVoiceChannel(ch.ID, ch.Name)
 		}
 	}
+
+	// ---- STREAM tracking (Go Live) ---- start
+	wasStreaming := false
+	wasChannelID := ""
+	if v.BeforeUpdate != nil {
+		wasStreaming = v.BeforeUpdate.SelfStream
+		wasChannelID = v.BeforeUpdate.ChannelID
+	}
+	isStreaming := v.SelfStream
+
+	// 1) старт/стоп стрима
+	if !wasStreaming && isStreaming && v.ChannelID != "" {
+		if err := store.StartStreamSession(userID, username, v.ChannelID); err != nil {
+			log.Println("[stream] StartStreamSession error:", err)
+		}
+		log.Println("[stream] START:", username, userID, "channel", v.ChannelID)
+	}
+
+	if wasStreaming && !isStreaming {
+		if err := store.EndStreamSession(userID); err != nil {
+			log.Println("[stream] EndStreamSession error:", err)
+		}
+		// когда стример выключил стрим — всем зрителям закрываем просмотр
+		if err := store.EndAllViewsForStreamer(userID); err != nil {
+			log.Println("[stream] EndAllViewsForStreamer error:", err)
+		}
+		log.Println("[stream] END:", username, userID)
+	}
+
+	// 2) если пользователь сменил voice-канал — закрываем просмотры в прошлом канале
+	if wasChannelID != "" && v.ChannelID != "" && wasChannelID != v.ChannelID {
+		if err := store.EndAllViewsForViewerInChannel(userID, wasChannelID); err != nil {
+			log.Println("[stream] EndAllViewsForViewerInChannel(move) error:", err)
+		}
+	}
+
+	// 3) если вышел из voice — закрываем все просмотры
+	if v.ChannelID == "" {
+		if err := store.EndAllViewsForViewer(userID); err != nil {
+			log.Println("[stream] EndAllViewsForViewer(leave) error:", err)
+		}
+	} else {
+		// иначе синхронизируем просмотры в текущем канале
+		if err := store.SyncStreamViews(userID, v.ChannelID, v.SelfStream, v.SelfDeaf); err != nil {
+			log.Println("[stream] SyncStreamViews error:", err)
+		}
+	}
+
+	// ---- STREAM tracking (Go Live) ---- end
 
 	// 🔊 JOIN: не было канала → появился
 	if v.BeforeUpdate == nil && v.ChannelID != "" {

@@ -65,7 +65,24 @@ func New(path string) *Storage {
     channel_id TEXT PRIMARY KEY,
     channel_name TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);`
+	);
+	CREATE TABLE IF NOT EXISTS stream_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    username TEXT,
+    channel_id TEXT NOT NULL,
+    started_at DATETIME NOT NULL,
+    ended_at DATETIME
+	);
+	CREATE TABLE IF NOT EXISTS stream_views (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    viewer_id TEXT NOT NULL,
+    streamer_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    started_at DATETIME NOT NULL,
+    ended_at DATETIME
+	);
+`
 
 	if _, err := db.Exec(query); err != nil {
 		log.Fatal(err)
