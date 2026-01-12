@@ -70,7 +70,7 @@ func (s *Storage) GetActiveStreamers(channelID string) ([]string, error) {
 	return ids, rows.Err()
 }
 
-// ---------- STREAM VIEWS ----------
+// -- STREAM VIEWS --
 
 func (s *Storage) StartStreamView(viewerID, streamerID, channelID string) error {
 	// защита от дублей
