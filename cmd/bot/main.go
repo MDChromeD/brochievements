@@ -469,17 +469,6 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 			return
 		}
 
-		log.Printf("[presence] event: user=%v guild=%v activities=%d",
-			func() string {
-				if p.User != nil {
-					return p.User.ID
-				}
-				return "<nil>"
-			}(),
-			p.GuildID,
-			len(p.Activities),
-		)
-
 		if p.User == nil {
 			return
 		}
@@ -487,23 +476,35 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 		userID := p.User.ID
 		newGame := extractGame(&p.Presence)
 
-		// ❌ пользователь не играет → закрываем, если было
-		if newGame == "" {
+		status := p.Status
+		isActive := status == discordgo.StatusOnline || status == discordgo.StatusDoNotDisturb
+
+		// 🔴 1. Пользователь стал idle / offline → закрываем игру
+		if !isActive {
 			active, err := store.GetActiveGameSession(userID)
-			if err != nil || active == nil {
-				return
+			if err == nil && active != nil {
+				_ = store.EndGameSession(active.ID)
+				log.Println("[presence] game closed due to idle:", userID)
 			}
-			_ = store.EndGameSession(active.ID)
 			return
 		}
 
-		// ▶️ пользователь играет → storage сам решит, что делать
+		// ❌ 2. Активен, но НЕ играет → закрываем, если было
+		if newGame == "" {
+			active, err := store.GetActiveGameSession(userID)
+			if err == nil && active != nil {
+				_ = store.EndGameSession(active.ID)
+				log.Println("[presence] game closed (no activity):", userID)
+			}
+			return
+		}
+
+		// ▶️ 3. Активен + играет → старт / продолжение
 		if err := store.EnsureGameSession(userID, newGame); err != nil {
 			log.Println("[presence] EnsureGameSession error:", err)
 		} else {
 			log.Println("[presence] EnsureGameSession OK:", userID, newGame)
 		}
-
 	}
 }
 
@@ -522,7 +523,7 @@ func notifyIfUpdated(s *discordgo.Session) {
 		log.Println("cannot read version:", err)
 		return
 	}
-	version := strings.TrimSpace(string(data))
+	deployedVersion := strings.TrimSpace(string(data))
 
 	channelID := os.Getenv("ACHIEVEMENTS_CHANNEL_ID")
 	if channelID == "" {
@@ -530,7 +531,11 @@ func notifyIfUpdated(s *discordgo.Session) {
 		return
 	}
 
-	msg := fmt.Sprintf("🚀 **Бот обновлён до версии `%s`**", version)
+	msg := formatDeployMessage(
+		deployedVersion,
+		version.ChangeNotes,
+	)
+
 	_, err = s.ChannelMessageSend(channelID, msg)
 	if err != nil {
 		log.Println("failed to send deploy message:", err)
@@ -539,4 +544,19 @@ func notifyIfUpdated(s *discordgo.Session) {
 
 	// важно: чтобы не спамить при рестартах
 	_ = os.Remove(versionChangedFile)
+}
+
+func formatDeployMessage(ver string, notes []string) string {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("🚀 **Бот обновлён до версии `%s`**\n\n", ver))
+
+	if len(notes) > 0 {
+		b.WriteString("📝 **Изменения:**\n")
+		for _, note := range notes {
+			b.WriteString("• " + note + "\n")
+		}
+	}
+
+	return b.String()
 }
