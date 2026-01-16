@@ -19,3 +19,6 @@
 
 # DB
 *.db
+
+#other
+*.zip

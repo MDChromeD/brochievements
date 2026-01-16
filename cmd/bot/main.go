@@ -2,7 +2,6 @@ package main
 
 import (
 	"brochievements/internal/achievements"
-	"brochievements/internal/ai"
 	"brochievements/internal/storage"
 	"brochievements/internal/version"
 	"flag"
@@ -36,13 +35,13 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	generator, err := ai.NewOpenAIGenerator()
-	if err != nil {
-		log.Println("[AI] disabled:", err)
-		generator = nil
-	} else {
-		log.Println("[AI] enabled")
-	}
+	// generator, err := ai.NewOpenAIGenerator()
+	// if err != nil {
+	// 	log.Println("[AI] disabled:", err)
+	// 	generator = nil
+	// } else {
+	// 	log.Println("[AI] enabled")
+	// }
 
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
@@ -65,6 +64,10 @@ func main() {
 
 	if err := store.CloseUnfinishedGameSessions(); err != nil {
 		log.Fatal("failed to close unfinished game sessions:", err)
+	}
+
+	if err := store.CloseUnfinishedAFKGameSessions(); err != nil {
+		log.Println("[startup] close unfinished AFK sessions error:", err)
 	}
 
 	if err := store.CloseUnfinishedStreamSessions(); err != nil {
@@ -153,12 +156,14 @@ func main() {
 
 	go func() {
 
-		achievements.PublishWeeklyDebug(
-			dg,    // *discordgo.Session
-			store, // *storage.Storage
-			channelID,
-			generator,
-		)
+		achievements.PublishWeeklyDebug(store)
+
+		// achievements.PublishWeeklyDebug(
+		// 	dg,    // *discordgo.Session
+		// 	store, // *storage.Storage
+		// 	channelID,
+		// 	generator,
+		// )
 	}()
 	// ------ удалить
 
@@ -474,13 +479,22 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 		}
 
 		userID := p.User.ID
+		username := p.User.Username
 		newGame := extractGame(&p.Presence)
 
 		status := p.Status
 		isActive := status == discordgo.StatusOnline || status == discordgo.StatusDoNotDisturb
 
-		// 🔴 1. Пользователь стал idle / offline → закрываем игру
-		if !isActive {
+		// =========================================================
+		// 🥔 AFK LOGIC START
+		// =========================================================
+
+		// 🔴 Пользователь стал idle / offline С ЗАПУЩЕННОЙ ИГРОЙ
+		if !isActive && newGame != "" {
+			// старт AFK-сессии (если ещё нет)
+			_ = store.StartAFKGameSession(userID, username, newGame)
+
+			// закрываем обычную игровую сессию
 			active, err := store.GetActiveGameSession(userID)
 			if err == nil && active != nil {
 				_ = store.EndGameSession(active.ID)
@@ -489,7 +503,18 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 			return
 		}
 
-		// ❌ 2. Активен, но НЕ играет → закрываем, если было
+		// 🟢 Пользователь снова активен ИЛИ игра пропала → закрываем AFK
+		afk, _ := store.GetActiveAFKGameSession(userID)
+		if afk != nil && (isActive || newGame == "") {
+			_ = store.EndAFKGameSession(afk.ID)
+			log.Println("[presence] AFK game closed:", userID)
+		}
+
+		// =========================================================
+		// 🎮 GAME LOGIC (твоя исходная логика)
+		// =========================================================
+
+		// ❌ Активен, но НЕ играет → закрываем игру
 		if newGame == "" {
 			active, err := store.GetActiveGameSession(userID)
 			if err == nil && active != nil {
@@ -499,7 +524,7 @@ func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Se
 			return
 		}
 
-		// ▶️ 3. Активен + играет → старт / продолжение
+		// ▶️ Активен + играет → старт / продолжение
 		if err := store.EnsureGameSession(userID, newGame); err != nil {
 			log.Println("[presence] EnsureGameSession error:", err)
 		} else {

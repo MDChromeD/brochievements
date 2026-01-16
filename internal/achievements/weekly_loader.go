@@ -7,150 +7,95 @@ import (
 
 func lastWeekRange() (from, to time.Time) {
 	now := time.Now()
-	to = now
-	from = now.AddDate(0, 0, -7)
+	to = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	from = to.AddDate(0, 0, -7)
 	return
 }
 
 func LoadWeeklyStats(store *storage.Storage) ([]WeeklyUserStats, error) {
 	from, to := lastWeekRange()
 
-	rows, err := store.DB.Query(`
-		SELECT
-			u.user_id,
-			u.username,
-
-			-- voice
-			IFNULL(SUM(strftime('%s', vs.left_at) - strftime('%s', vs.joined_at)), 0) AS voice_seconds,
-			COUNT(vs.id) AS voice_joins,
-
-			-- games
-			IFNULL(SUM(strftime('%s', gs.ended_at) - strftime('%s', gs.started_at)), 0) AS game_seconds,
-			COUNT(gs.id) AS game_sessions,
-			COUNT(DISTINCT gs.game) AS distinct_games
-
-		FROM users u
-		LEFT JOIN voice_sessions vs
-			ON vs.user_id = u.user_id
-			AND vs.joined_at >= ?
-			AND vs.left_at IS NOT NULL
-
-		LEFT JOIN game_sessions gs
-			ON gs.user_id = u.user_id
-			AND gs.started_at >= ?
-			AND gs.ended_at IS NOT NULL
-			AND gs.game != 'Custom Status'
-		GROUP BY u.user_id
-	`, to, from)
-
+	voiceRows, err := store.LoadWeeklyVoiceRaw(from, to)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var result []WeeklyUserStats
-
-	for rows.Next() {
-		var s WeeklyUserStats
-		err := rows.Scan(
-			&s.UserID,
-			&s.Username,
-			&s.VoiceSeconds,
-			&s.VoiceJoins,
-			&s.GameSeconds,
-			&s.GameSessionsCount,
-			&s.DistinctGames,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		result = append(result, s)
-	}
-
-	return result, nil
-}
-
-func LoadWeeklyAFK(store *storage.Storage, stats []WeeklyUserStats) error {
-	from, _ := lastWeekRange()
-
-	rows, err := store.DB.Query(`
-		SELECT
-			vcs.user_id,
-			IFNULL(SUM(strftime('%s', vcs.left_at) - strftime('%s', vcs.joined_at)), 0)
-		FROM voice_channel_sessions vcs
-		JOIN voice_channels vc ON vc.channel_id = vcs.channel_id
-		WHERE vc.channel_name = 'Я_за_хлебушком_пацаны'
-		  AND vcs.joined_at >= ?
-		  AND vcs.left_at IS NOT NULL
-		GROUP BY vcs.user_id
-	`, from)
-
+	gameRows, err := store.LoadWeeklyGameRaw(from, to)
 	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	afkMap := map[string]int64{}
-
-	for rows.Next() {
-		var userID string
-		var seconds int64
-		rows.Scan(&userID, &seconds)
-		afkMap[userID] = seconds
+		return nil, err
 	}
 
-	for i := range stats {
-		stats[i].AFKSeconds = afkMap[stats[i].UserID]
-	}
-
-	return nil
-}
-
-func LoadWeeklyMaxGame(store *storage.Storage, stats []WeeklyUserStats) error {
-	from, _ := lastWeekRange()
-
-	rows, err := store.DB.Query(`
-		SELECT
-			user_id,
-			game,
-			SUM(strftime('%s', ended_at) - strftime('%s', started_at)) AS seconds
-		FROM game_sessions
-		WHERE started_at >= ?
-		  AND ended_at IS NOT NULL
-		  AND game != 'Custom Status'
-		GROUP BY user_id, game
-	`, from)
-
+	afkGameRows, err := store.LoadWeeklyAFKGameRaw(from, to)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer rows.Close()
 
-	maxMap := map[string]struct {
-		game string
-		sec  int64
-	}{}
+	afkRows, err := store.LoadWeeklyBreadAFKRaw(from, to, "Я_за_хлебушком_пацаны")
+	if err != nil {
+		return nil, err
+	}
 
-	for rows.Next() {
-		var userID, game string
-		var sec int64
-		rows.Scan(&userID, &game, &sec)
+	StreamRows, err := store.LoadWeeklyStreamRaw(from, to)
+	if err != nil {
+		return nil, err
+	}
 
-		if cur, ok := maxMap[userID]; !ok || sec > cur.sec {
-			maxMap[userID] = struct {
-				game string
-				sec  int64
-			}{game, sec}
+	StreamViewRows, err := store.LoadWeeklyStreamViewRaw(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	byUser := map[string]*WeeklyUserStats{}
+
+	get := func(userID, username string) *WeeklyUserStats {
+		st := byUser[userID]
+		if st == nil {
+			st = &WeeklyUserStats{UserID: userID}
+			byUser[userID] = st
 		}
-	}
-
-	for i := range stats {
-		if m, ok := maxMap[stats[i].UserID]; ok {
-			stats[i].MaxSingleGame = m.game
-			stats[i].MaxSingleGameSec = m.sec
+		if st.Username == "" && username != "" {
+			st.Username = username
 		}
+		return st
 	}
 
-	return nil
+	for _, r := range voiceRows {
+		st := get(r.UserID, r.Username)
+		st.VoiceSeconds = r.Seconds
+	}
+
+	for _, r := range afkGameRows {
+		st := get(r.UserID, r.Username)
+		st.AfkGameSeconds = r.Seconds
+	}
+
+	for _, r := range afkRows {
+		st := get(r.UserID, r.Username)
+		st.AFKSeconds = r.Seconds
+	}
+
+	for _, r := range StreamRows {
+		st := get(r.UserID, r.Username)
+		st.StreamSeconds = r.Seconds
+	}
+
+	for _, r := range StreamViewRows {
+		st := get(r.UserID, r.Username)
+		st.StreamViewSeconds = r.Seconds
+	}
+
+	for _, r := range gameRows {
+		st := get(r.UserID, r.Username)
+		st.GameSeconds += r.Seconds
+		st.DistinctGames++
+	}
+
+	res := make([]WeeklyUserStats, 0, len(byUser))
+	for _, st := range byUser {
+		if st.Username == "" {
+			st.Username = st.UserID
+		}
+		res = append(res, *st)
+	}
+	return res, nil
 }
