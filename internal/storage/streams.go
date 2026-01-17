@@ -19,7 +19,7 @@ func (s *Storage) StartStreamSession(userID, username, channelID string) error {
 	if err == nil {
 		return nil // уже стримит
 	}
-	if err != nil && err != sql.ErrNoRows {
+	if err != sql.ErrNoRows {
 		return err
 	}
 
@@ -85,7 +85,7 @@ func (s *Storage) StartStreamView(viewerID, streamerID, channelID string) error 
 	if err == nil {
 		return nil // уже "смотрит"
 	}
-	if err != nil && err != sql.ErrNoRows {
+	if err != sql.ErrNoRows {
 		return err
 	}
 

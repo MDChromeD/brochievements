@@ -16,6 +16,12 @@ func RunWeeklyAll(stats []WeeklyUserStats) []*WeeklyAchievement {
 	if a := NerdOfWeek(stats); a != nil {
 		result = append(result, a)
 	}
+	if a := TopStreamer(stats); a != nil {
+		result = append(result, a)
+	}
+	if a := TopViewer(stats); a != nil {
+		result = append(result, a)
+	}
 
 	return result
 }

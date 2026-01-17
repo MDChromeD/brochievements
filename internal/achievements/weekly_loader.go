@@ -88,6 +88,11 @@ func LoadWeeklyStats(store *storage.Storage) ([]WeeklyUserStats, error) {
 		st := get(r.UserID, r.Username)
 		st.GameSeconds += r.Seconds
 		st.DistinctGames++
+
+		if st.MaxSingleGameSec < r.Seconds {
+			st.MaxSingleGameSec = r.Seconds
+			st.MaxSingleGame = r.Game
+		}
 	}
 
 	res := make([]WeeklyUserStats, 0, len(byUser))
