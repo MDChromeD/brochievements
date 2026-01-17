@@ -82,6 +82,10 @@ func main() {
 			Name:        "stats",
 			Description: "Показать мою статистику",
 		},
+		{
+			Name:        "weekly_stats",
+			Description: "Показать мою статистику с начала недели",
+		},
 	}
 
 	dg.Identify.Intents = discordgo.IntentsGuilds |
@@ -123,7 +127,9 @@ func main() {
 
 		switch i.ApplicationCommandData().Name {
 		case "stats":
-			handleStats(s, i, store)
+			handleStats(s, i, store, false)
+		case "weekly":
+			handleStats(s, i, store, true)
 		}
 	})
 
@@ -357,6 +363,7 @@ func handleStats(
 	s *discordgo.Session,
 	i *discordgo.InteractionCreate,
 	store *storage.Storage,
+	isWeeky bool,
 ) {
 	user := i.Member.User
 	userID := user.ID
