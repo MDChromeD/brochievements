@@ -368,10 +368,13 @@ func handleStats(
 	user := i.Member.User
 	userID := user.ID
 
-	stats, err := store.GetUserStats(userID)
-	if err != nil {
-		log.Println("GetUserStats error:", err)
-		return
+	var stats *storage.UserStats
+	var err error
+
+	if isWeeky {
+		stats, err = store.GetUserStatsWeekly(userID)
+	} else {
+		stats, err = store.GetUserStats(userID)
 	}
 
 	// --- Форматирование времени ---
