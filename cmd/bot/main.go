@@ -128,7 +128,7 @@ func main() {
 		switch i.ApplicationCommandData().Name {
 		case "stats":
 			handleStats(s, i, store, false)
-		case "weekly":
+		case "weekly_stats":
 			handleStats(s, i, store, true)
 		}
 	})
