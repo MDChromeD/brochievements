@@ -116,7 +116,7 @@ func (ws *WeeklyScheduler) publishWeekly() {
 }
 
 func (ws *WeeklyScheduler) sendWeeklyEmbed(achs []*achievements.WeeklyAchievement) {
-	achievements.SendWeeklyEmbed(ws.session, ws.channelID, achs, ws.generator)
+	achievements.SendWeeklyEmbed(ws.session, ws.channelID, achs, ws.generator, ws.store)
 }
 
 func (ws *WeeklyScheduler) sendNoAchievementsMessage() {
