@@ -616,14 +616,22 @@ func handleWeeklyPublish(
 	generator ai.Generator,
 	channelID string,
 ) {
+	log.Println("[weekly command] === START handleWeeklyPublish ===")
+	log.Printf("[weekly command] channelID: %s", channelID)
+	log.Printf("[weekly command] session state: %v", s.State != nil)
+	log.Printf("[weekly command] generator != nil: %v", generator != nil)
+
 	// Отвечаем что начали обработку
-	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Content: "⏳ Публикую итоги недели...",
 			Flags:   discordgo.MessageFlagsEphemeral,
 		},
 	})
+	if err != nil {
+		log.Println("[weekly command] InteractionRespond error:", err)
+	}
 
 	stats, err := achievements.LoadWeeklyStats(store)
 	if err != nil {
@@ -634,9 +642,13 @@ func handleWeeklyPublish(
 		})
 		return
 	}
+	log.Printf("[weekly command] Loaded stats for %d users", len(stats))
 
 	achs := achievements.RunWeeklyAll(stats)
+	log.Printf("[weekly command] RunWeeklyAll returned %d achievements", len(achs))
+
 	if len(achs) == 0 {
+		log.Println("[weekly command] No achievements, sending message...")
 		s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
 			Content: "📊 Нет достижений за эту неделю",
 			Flags:   discordgo.MessageFlagsEphemeral,
@@ -644,13 +656,19 @@ func handleWeeklyPublish(
 		return
 	}
 
-	log.Printf("[weekly command] Publishing %d achievements", len(achs))
+	log.Printf("[weekly command] About to call SendWeeklyEmbed with %d achievements", len(achs))
 	achievements.SendWeeklyEmbed(s, channelID, achs, generator, store)
+	log.Println("[weekly command] SendWeeklyEmbed returned")
 
-	s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+	_, err = s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
 		Content: fmt.Sprintf("✅ Опубликовано %d достижений!", len(achs)),
 		Flags:   discordgo.MessageFlagsEphemeral,
 	})
+	if err != nil {
+		log.Println("[weekly command] FollowupMessageCreate error:", err)
+	}
+
+	log.Println("[weekly command] === END handleWeeklyPublish ===")
 }
 
 func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Session, *discordgo.PresenceUpdate) {
