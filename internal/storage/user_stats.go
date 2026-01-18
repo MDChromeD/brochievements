@@ -127,7 +127,7 @@ func (s *Storage) fillGameStats(userID string, stats *UserStats, startDate strin
 		`, userID).Scan(&stats.FavoriteGame, &stats.FavoriteGameSec)
 
 		s.DB.QueryRow(`
-			SELECT COUNT(*) FROM game_sessions WHERE user_id = ?
+			SELECT COUNT(DISTINCT game) FROM game_sessions WHERE user_id = ?
 		`, userID).Scan(&stats.GameSwitches)
 	} else {
 		s.DB.QueryRow(`
@@ -147,7 +147,7 @@ func (s *Storage) fillGameStats(userID string, stats *UserStats, startDate strin
 		`, userID, startDate).Scan(&stats.FavoriteGame, &stats.FavoriteGameSec)
 
 		s.DB.QueryRow(`
-			SELECT COUNT(*) FROM game_sessions WHERE user_id = ? AND started_at >= ?
+			SELECT COUNT(DISTINCT game) FROM game_sessions WHERE user_id = ? AND started_at >= ?
 		`, userID, startDate).Scan(&stats.GameSwitches)
 	}
 }

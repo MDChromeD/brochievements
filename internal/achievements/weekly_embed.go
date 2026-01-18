@@ -1,16 +1,20 @@
 package achievements
 
 import (
+	"brochievements/internal/ai"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-func sendWeeklyEmbed(
+// SendWeeklyEmbed отправляет embed с еженедельными достижениями
+func SendWeeklyEmbed(
 	s *discordgo.Session,
 	channelID string,
 	achs []*WeeklyAchievement,
+	generator ai.Generator, // ← добавили параметр
 ) {
 	if len(achs) == 0 {
 		s.ChannelMessageSend(
@@ -21,25 +25,32 @@ func sendWeeklyEmbed(
 	}
 
 	var winners []string
-	// var shamed []string
 
 	for _, a := range achs {
+		description := a.Description // дефолтное описание
+
+		// Генерируем AI-описание, если generator доступен
+		if generator != nil {
+			aiDesc, err := ai.GenerateAchievementText(generator, ai.AchievementAIContext{
+				Title: a.Title,
+				Kind:  "achievement",
+				Fact:  fmt.Sprintf("%s получил достижение за %s", a.Username, a.Value),
+			})
+			if err != nil {
+				log.Printf("[AI] generation error for %s: %v", a.Code, err)
+			} else {
+				description = aiDesc
+			}
+		}
+
 		line := fmt.Sprintf(
-			"**%s**\n→ %s (%s)",
+			"**%s**\n%s\n→ %s (%s)",
 			a.Title,
+			description, // ← AI-описание или дефолтное
 			a.Username,
 			a.Value,
 		)
-
-		// грубое, но рабочее разделение
-		// if a.Code == "ghost" ||
-		// 	a.Code == "afk_life" ||
-		// 	a.Code == "just_looking" ||
-		// 	a.Code == "launched_and_left" {
-		// 	shamed = append(shamed, line)
-		// } else {
 		winners = append(winners, line)
-		// }
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -50,10 +61,6 @@ func sendWeeklyEmbed(
 				Name:  "🏆 Достижения",
 				Value: joinOrEmpty(winners),
 			},
-			// {
-			// 	Name:  "💀 Антиачивки",
-			// 	Value: joinOrEmpty(shamed),
-			// },
 		},
 	}
 

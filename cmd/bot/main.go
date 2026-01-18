@@ -2,6 +2,8 @@ package main
 
 import (
 	"brochievements/internal/achievements"
+	"brochievements/internal/ai"
+	"brochievements/internal/scheduler"
 	"brochievements/internal/storage"
 	"brochievements/internal/version"
 	"flag"
@@ -35,13 +37,13 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	// generator, err := ai.NewOpenAIGenerator()
-	// if err != nil {
-	// 	log.Println("[AI] disabled:", err)
-	// 	generator = nil
-	// } else {
-	// 	log.Println("[AI] enabled")
-	// }
+	generator, err := ai.NewOpenAIGenerator()
+	if err != nil {
+		log.Println("[AI] disabled:", err)
+		generator = nil
+	} else {
+		log.Println("[AI] enabled")
+	}
 
 	token := os.Getenv("DISCORD_TOKEN")
 	if token == "" {
@@ -157,12 +159,16 @@ func main() {
 
 	notifyIfUpdated(dg)
 
+	weeklyScheduler := scheduler.NewWeeklyScheduler(dg, store, channelID, generator)
+	weeklyScheduler.Start()
+	defer weeklyScheduler.Stop()
+
 	// ------ удалить
 	// ===== WEEKLY DEBUG RUN (ONE-TIME) =====
 
 	go func() {
 
-		achievements.PublishWeeklyDebug(store)
+		achievements.PublishWeeklyDebug(store, generator)
 
 		// achievements.PublishWeeklyDebug(
 		// 	dg,    // *discordgo.Session
