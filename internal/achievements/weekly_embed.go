@@ -19,12 +19,22 @@ func SendWeeklyEmbed(
 	generator ai.Generator,
 	store *storage.Storage,
 ) {
+	log.Println("[weekly_embed] === START SendWeeklyEmbed ===")
+
 	if len(achs) == 0 {
+		log.Println("[weekly_embed] No achievements to publish")
 		s.ChannelMessageSend(
 			channelID,
 			"📊 Итоги недели\n\nНикто ничего не заслужил 😈",
 		)
 		return
+	}
+
+	// 🔍 ДИАГНОСТИКА GENERATOR
+	if generator == nil {
+		log.Println("[weekly_embed] ⚠️ AI Generator is NIL!")
+	} else {
+		log.Println("[weekly_embed] ✅ AI Generator is available")
 	}
 
 	// Вычисляем начало недели для записи в БД
@@ -34,20 +44,29 @@ func SendWeeklyEmbed(
 	var winners []string
 
 	for _, a := range achs {
-		description := a.Description // дефолтное описание
+		description := a.Description
+
+		log.Printf("[weekly_embed] Processing: %s (%s)", a.Code, a.Title)
+		log.Printf("[weekly_embed] Default description: '%s'", description)
 
 		// Генерируем AI-описание, если generator доступен
 		if generator != nil {
+			log.Printf("[weekly_embed] Calling AI.GenerateAchievementText for '%s'...", a.Code)
+
 			aiDesc, err := ai.GenerateAchievementText(generator, ai.AchievementAIContext{
 				Title: a.Title,
 				Kind:  "achievement",
 				Fact:  fmt.Sprintf("%s получил достижение за %s", a.Username, a.Value),
 			})
+
 			if err != nil {
-				log.Printf("[AI] generation error for %s: %v", a.Code, err)
+				log.Printf("[weekly_embed][AI] ❌ Error: %v", err)
 			} else {
 				description = aiDesc
+				log.Printf("[weekly_embed][AI] ✅ Generated: '%s'", aiDesc)
 			}
+		} else {
+			log.Println("[weekly_embed] ⚠️ Skipping AI (generator is nil)")
 		}
 
 		// 💾 Сохраняем достижение в БД
@@ -62,21 +81,22 @@ func SendWeeklyEmbed(
 				weekStart,
 			)
 			if err != nil {
-				log.Printf("[DB] Failed to save achievement %s for %s: %v",
-					a.Code, a.Username, err)
+				log.Printf("[weekly_embed][DB] ❌ Save error: %v", err)
 			} else {
-				log.Printf("[DB] Saved achievement: %s → %s", a.Username, a.Code)
+				log.Printf("[weekly_embed][DB] ✅ Saved: %s → %s", a.Username, a.Code)
 			}
 		}
 
 		line := fmt.Sprintf(
 			"**%s**\n%s\n→ %s (%s)",
 			a.Title,
-			description, // ← AI-описание или дефолтное
+			description,
 			a.Username,
 			a.Value,
 		)
 		winners = append(winners, line)
+
+		log.Printf("[weekly_embed] Final description: '%s'", description)
 	}
 
 	embed := &discordgo.MessageEmbed{
@@ -90,7 +110,9 @@ func SendWeeklyEmbed(
 		},
 	}
 
+	log.Println("[weekly_embed] Sending embed to Discord...")
 	s.ChannelMessageSendEmbed(channelID, embed)
+	log.Println("[weekly_embed] === END SendWeeklyEmbed ===")
 }
 
 func joinOrEmpty(lines []string) string {
