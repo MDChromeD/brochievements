@@ -88,6 +88,10 @@ func main() {
 			Name:        "weekly_stats",
 			Description: "Показать мою статистику с начала недели",
 		},
+		{
+			Name:        "my_achievements",
+			Description: "Мои достижения за всё время",
+		},
 	}
 
 	dg.Identify.Intents = discordgo.IntentsGuilds |
@@ -132,6 +136,8 @@ func main() {
 			handleStats(s, i, store, false)
 		case "weekly_stats":
 			handleStats(s, i, store, true)
+		case "my_achievements":
+			handleMyAchievements(s, i, store)
 		}
 	})
 
@@ -468,6 +474,120 @@ func handleStats(
 			},
 		},
 	)
+
+	if err != nil {
+		log.Println("InteractionRespond error:", err)
+	}
+}
+
+func handleMyAchievements(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	store *storage.Storage,
+) {
+	user := i.Member.User
+	userID := user.ID
+
+	// Получаем достижения из БД
+	achievements, err := store.GetUserAchievements(userID)
+	if err != nil {
+		log.Println("GetUserAchievements error:", err)
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ Ошибка при получении достижений",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	// Если достижений нет
+	if len(achievements) == 0 {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "🏆 У тебя пока нет достижений. Продолжай активничать!",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	// Группируем достижения по коду для подсчёта
+	achievementCounts := make(map[string]int)
+	achievementTitles := make(map[string]string)
+	latestAchievements := make(map[string]storage.AchievementRecord)
+
+	for _, ach := range achievements {
+		achievementCounts[ach.AchievementCode]++
+		achievementTitles[ach.AchievementCode] = ach.AchievementTitle
+
+		// Сохраняем самое свежее достижение каждого типа
+		if _, exists := latestAchievements[ach.AchievementCode]; !exists {
+			latestAchievements[ach.AchievementCode] = ach
+		}
+	}
+
+	// Формируем список достижений
+	var achievementList []string
+	totalCount := 0
+
+	for code, count := range achievementCounts {
+		title := achievementTitles[code]
+		latest := latestAchievements[code]
+
+		var line string
+		if count > 1 {
+			line = fmt.Sprintf(
+				"%s **×%d**\n_Последнее: %s (%s)_",
+				title,
+				count,
+				latest.Value,
+				latest.AwardedAt.Format("02.01.2006"),
+			)
+		} else {
+			line = fmt.Sprintf(
+				"%s\n_Получено: %s (%s)_",
+				title,
+				latest.Value,
+				latest.AwardedAt.Format("02.01.2006"),
+			)
+		}
+
+		achievementList = append(achievementList, line)
+		totalCount += count
+	}
+
+	// Формируем embed
+	embed := &discordgo.MessageEmbed{
+		Title: fmt.Sprintf("🏆 Достижения: %s", user.Username),
+		Color: 0xFFD700, // золотой цвет
+		Thumbnail: &discordgo.MessageEmbedThumbnail{
+			URL: user.AvatarURL(""),
+		},
+		Description: fmt.Sprintf(
+			"**Всего получено:** %d достижений\n**Уникальных:** %d типов\n\n%s",
+			totalCount,
+			len(achievementCounts),
+			strings.Join(achievementList, "\n\n"),
+		),
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: "Продолжай в том же духе! 💪",
+		},
+	}
+
+	// Если достижений слишком много — ограничиваем
+	if len(embed.Description) > 4000 {
+		embed.Description = embed.Description[:3900] + "\n\n_... и ещё несколько достижений_"
+	}
+
+	err = s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
 
 	if err != nil {
 		log.Println("InteractionRespond error:", err)
