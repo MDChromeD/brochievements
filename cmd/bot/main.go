@@ -92,6 +92,10 @@ func main() {
 			Name:        "my_achievements",
 			Description: "Мои достижения за всё время",
 		},
+		{
+			Name:        "weekly",
+			Description: "[ADMIN] Опубликовать итоги недели прямо сейчас",
+		},
 	}
 
 	dg.Identify.Intents = discordgo.IntentsGuilds |
@@ -138,6 +142,8 @@ func main() {
 			handleStats(s, i, store, true)
 		case "my_achievements":
 			handleMyAchievements(s, i, store)
+		case "weekly":
+			handleWeeklyPublish(s, i, store, generator, channelID)
 		}
 	})
 
@@ -601,6 +607,50 @@ func closeUnfinishedGameSessions(store *storage.Storage) error {
 		WHERE ended_at IS NULL
 	`)
 	return err
+}
+
+func handleWeeklyPublish(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	store *storage.Storage,
+	generator ai.Generator,
+	channelID string,
+) {
+	// Отвечаем что начали обработку
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Content: "⏳ Публикую итоги недели...",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		},
+	})
+
+	stats, err := achievements.LoadWeeklyStats(store)
+	if err != nil {
+		log.Println("[weekly command] Error loading stats:", err)
+		s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+			Content: "❌ Ошибка при загрузке статистики",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+		return
+	}
+
+	achs := achievements.RunWeeklyAll(stats)
+	if len(achs) == 0 {
+		s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+			Content: "📊 Нет достижений за эту неделю",
+			Flags:   discordgo.MessageFlagsEphemeral,
+		})
+		return
+	}
+
+	log.Printf("[weekly command] Publishing %d achievements", len(achs))
+	achievements.SendWeeklyEmbed(s, channelID, achs, generator, store)
+
+	s.FollowupMessageCreate(i.Interaction, false, &discordgo.WebhookParams{
+		Content: fmt.Sprintf("✅ Опубликовано %d достижений!", len(achs)),
+		Flags:   discordgo.MessageFlagsEphemeral,
+	})
 }
 
 func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Session, *discordgo.PresenceUpdate) {
