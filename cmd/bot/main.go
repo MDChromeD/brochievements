@@ -11,6 +11,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -58,6 +59,53 @@ func main() {
 	if guildID == "" {
 		log.Fatal("GUILD_ID is not set")
 	}
+
+	publishHour := 18         // дефолт
+	publishMinute := 00       // дефолт
+	publishDay := time.Sunday // дефолт
+
+	if envHour := os.Getenv("WEEKLY_PUBLISH_HOUR"); envHour != "" {
+		if h, err := strconv.Atoi(envHour); err == nil && h >= 0 && h <= 23 {
+			publishHour = h
+		} else {
+			log.Printf("Invalid WEEKLY_PUBLISH_HOUR: %s, using default: %d", envHour, publishHour)
+		}
+	}
+
+	if envMinute := os.Getenv("WEEKLY_PUBLISH_HOUR"); envMinute != "" {
+		if h, err := strconv.Atoi(envMinute); err == nil && h >= 0 && h <= 23 {
+			publishHour = h
+		} else {
+			log.Printf("Invalid WEEKLY_PUBLISH_MINUTE: %s, using default: %d", envMinute, publishMinute)
+		}
+	}
+
+	if envDay := os.Getenv("WEEKLY_PUBLISH_DAY"); envDay != "" {
+		dayMap := map[string]time.Weekday{
+			"sunday":    time.Sunday,
+			"monday":    time.Monday,
+			"tuesday":   time.Tuesday,
+			"wednesday": time.Wednesday,
+			"thursday":  time.Thursday,
+			"friday":    time.Friday,
+			"saturday":  time.Saturday,
+			"0":         time.Sunday,
+			"1":         time.Monday,
+			"2":         time.Tuesday,
+			"3":         time.Wednesday,
+			"4":         time.Thursday,
+			"5":         time.Friday,
+			"6":         time.Saturday,
+		}
+
+		if day, ok := dayMap[strings.ToLower(envDay)]; ok {
+			publishDay = day
+		} else {
+			log.Printf("Invalid WEEKLY_PUBLISH_DAY: %s, using default: Sunday", envDay)
+		}
+	}
+
+	log.Printf("[config] Weekly publish schedule: %s at %02d:00", publishDay, publishHour)
 
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -171,7 +219,7 @@ func main() {
 
 	notifyIfUpdated(dg)
 
-	weeklyScheduler := scheduler.NewWeeklyScheduler(dg, store, channelID, generator)
+	weeklyScheduler := scheduler.NewWeeklyScheduler(dg, store, channelID, generator, publishHour, publishMinute, publishDay)
 	weeklyScheduler.Start()
 	defer weeklyScheduler.Stop()
 

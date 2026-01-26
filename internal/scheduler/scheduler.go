@@ -11,11 +11,14 @@ import (
 )
 
 type WeeklyScheduler struct {
-	session   *discordgo.Session
-	store     *storage.Storage
-	channelID string
-	generator ai.Generator
-	stopChan  chan struct{}
+	session       *discordgo.Session
+	store         *storage.Storage
+	channelID     string
+	generator     ai.Generator
+	stopChan      chan struct{}
+	publishHour   int
+	publishMinute int
+	publishDay    time.Weekday
 }
 
 func NewWeeklyScheduler(
@@ -23,13 +26,19 @@ func NewWeeklyScheduler(
 	store *storage.Storage,
 	channelID string,
 	generator ai.Generator,
+	publishHour int,
+	publishMinute int,
+	publishDay time.Weekday,
 ) *WeeklyScheduler {
 	return &WeeklyScheduler{
-		session:   session,
-		store:     store,
-		channelID: channelID,
-		generator: generator, // ← ЭТА СТРОКА ОТСУТСТВОВАЛА!
-		stopChan:  make(chan struct{}),
+		session:       session,
+		store:         store,
+		channelID:     channelID,
+		generator:     generator, // ← ЭТА СТРОКА ОТСУТСТВОВАЛА!
+		stopChan:      make(chan struct{}),
+		publishHour:   publishHour,
+		publishMinute: publishMinute,
+		publishDay:    publishDay,
 	}
 }
 
@@ -67,14 +76,17 @@ func (ws *WeeklyScheduler) run() {
 // nextPublishTime вычисляет следующее время публикации (воскресенье 18:00)
 func (ws *WeeklyScheduler) nextPublishTime() time.Time {
 	now := time.Now()
+	targetDay := ws.publishDay
+	targetHour := ws.publishHour
+	targetMinute := ws.publishMinute
 
 	// Находим ближайшее воскресенье
-	daysUntilSunday := (7 - int(now.Weekday())) % 7
+	daysUntilSunday := (int(targetDay) - int(now.Weekday())) % 7
 	if daysUntilSunday == 0 {
 		// Сегодня воскресенье
 		publishTime := time.Date(
 			now.Year(), now.Month(), now.Day(),
-			18, 0, 0, 0,
+			targetHour, targetMinute, 0, 0,
 			now.Location(),
 		)
 
@@ -90,7 +102,7 @@ func (ws *WeeklyScheduler) nextPublishTime() time.Time {
 	nextSunday := now.AddDate(0, 0, daysUntilSunday)
 	return time.Date(
 		nextSunday.Year(), nextSunday.Month(), nextSunday.Day(),
-		18, 0, 0, 0,
+		targetHour, targetMinute, 0, 0,
 		now.Location(),
 	)
 }
