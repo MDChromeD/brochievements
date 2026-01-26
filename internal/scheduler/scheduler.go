@@ -16,9 +16,9 @@ type WeeklyScheduler struct {
 	channelID     string
 	generator     ai.Generator
 	stopChan      chan struct{}
-	publishHour   int
-	publishMinute int
-	publishDay    time.Weekday
+	publishHour   int          // Час публикации (0-23)
+	publishMinute int          // Минута публикации (0-59)
+	publishDay    time.Weekday // День недели (0=Sunday, 6=Saturday)
 }
 
 func NewWeeklyScheduler(
@@ -34,7 +34,7 @@ func NewWeeklyScheduler(
 		session:       session,
 		store:         store,
 		channelID:     channelID,
-		generator:     generator, // ← ЭТА СТРОКА ОТСУТСТВОВАЛА!
+		generator:     generator,
 		stopChan:      make(chan struct{}),
 		publishHour:   publishHour,
 		publishMinute: publishMinute,
@@ -73,38 +73,33 @@ func (ws *WeeklyScheduler) run() {
 	}
 }
 
-// nextPublishTime вычисляет следующее время публикации (воскресенье 18:00)
+// nextPublishTime вычисляет следующее время публикации
 func (ws *WeeklyScheduler) nextPublishTime() time.Time {
 	now := time.Now()
 	targetDay := ws.publishDay
 	targetHour := ws.publishHour
 	targetMinute := ws.publishMinute
 
-	// Находим ближайшее воскресенье
-	daysUntilSunday := (int(targetDay) - int(now.Weekday())) % 7
-	if daysUntilSunday == 0 {
-		// Сегодня воскресенье
-		publishTime := time.Date(
-			now.Year(), now.Month(), now.Day(),
-			targetHour, targetMinute, 0, 0,
-			now.Location(),
-		)
+	// Вычисляем дату целевого дня на ЭТОЙ неделе
+	currentWeekday := int(now.Weekday())
+	targetWeekday := int(targetDay)
 
-		// Если 18:00 уже прошло — берём следующее воскресенье
-		if now.After(publishTime) {
-			daysUntilSunday = 7
-		} else {
-			return publishTime
-		}
-	}
+	daysUntilTarget := (targetWeekday - currentWeekday + 7) % 7
 
-	// Вычисляем дату следующего воскресенья в 18:00
-	nextSunday := now.AddDate(0, 0, daysUntilSunday)
-	return time.Date(
-		nextSunday.Year(), nextSunday.Month(), nextSunday.Day(),
+	targetDate := now.AddDate(0, 0, daysUntilTarget)
+	publishTime := time.Date(
+		targetDate.Year(), targetDate.Month(), targetDate.Day(),
 		targetHour, targetMinute, 0, 0,
 		now.Location(),
 	)
+
+	// Если целевое время уже прошло (сегодня и час прошёл, или день на этой неделе прошёл)
+	if now.After(publishTime) || now.Equal(publishTime) {
+		// Берём следующую неделю
+		publishTime = publishTime.AddDate(0, 0, 7)
+	}
+
+	return publishTime
 }
 
 func (ws *WeeklyScheduler) publishWeekly() {
