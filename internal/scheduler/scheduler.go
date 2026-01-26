@@ -28,6 +28,7 @@ func NewWeeklyScheduler(
 		session:   session,
 		store:     store,
 		channelID: channelID,
+		generator: generator, // ← ЭТА СТРОКА ОТСУТСТВОВАЛА!
 		stopChan:  make(chan struct{}),
 	}
 }
