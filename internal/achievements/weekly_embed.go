@@ -111,7 +111,12 @@ func SendWeeklyEmbed(
 	}
 
 	log.Println("[weekly_embed] Sending embed to Discord...")
-	s.ChannelMessageSendEmbed(channelID, embed)
+	msg, err := s.ChannelMessageSendEmbed(channelID, embed) // ← CHANGE THIS
+	if err != nil {
+		log.Printf("[weekly_embed] ❌ Discord API error: %v", err) // ← ADD THIS
+	} else {
+		log.Printf("[weekly_embed] ✅ Message sent successfully, ID: %s", msg.ID) // ← ADD THIS
+	}
 	log.Println("[weekly_embed] === END SendWeeklyEmbed ===")
 }
 
