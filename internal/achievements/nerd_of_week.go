@@ -23,7 +23,7 @@ func NerdOfWeek(stats []WeeklyUserStats) *WeeklyAchievement {
 
 	return &WeeklyAchievement{
 		Code:        "nerd_of_week",
-		Title:       "(_*_) На все щели мастер",
+		Title:       "(\\_*\\_) На все щели мастер",
 		Description: "Провёл больше всех времени в голосе",
 		UserID:      winner.UserID,
 		Username:    winner.Username,
