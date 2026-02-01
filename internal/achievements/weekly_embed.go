@@ -50,24 +50,24 @@ func SendWeeklyEmbed(
 		log.Printf("[weekly_embed] Default description: '%s'", description)
 
 		// Генерируем AI-описание, если generator доступен
-		if generator != nil {
-			log.Printf("[weekly_embed] Calling AI.GenerateAchievementText for '%s'...", a.Code)
+		// if generator != nil {
+		// 	log.Printf("[weekly_embed] Calling AI.GenerateAchievementText for '%s'...", a.Code)
 
-			aiDesc, err := ai.GenerateAchievementText(generator, ai.AchievementAIContext{
-				Title: a.Title,
-				Kind:  "achievement",
-				Fact:  fmt.Sprintf("%s получил достижение за %s", a.Username, a.Value),
-			})
+		// 	aiDesc, err := ai.GenerateAchievementText(generator, ai.AchievementAIContext{
+		// 		Title: a.Title,
+		// 		Kind:  "achievement",
+		// 		Fact:  fmt.Sprintf("%s получил достижение за %s", a.Username, a.Value),
+		// 	})
 
-			if err != nil {
-				log.Printf("[weekly_embed][AI] ❌ Error: %v", err)
-			} else {
-				description = aiDesc
-				log.Printf("[weekly_embed][AI] ✅ Generated: '%s'", aiDesc)
-			}
-		} else {
-			log.Println("[weekly_embed] ⚠️ Skipping AI (generator is nil)")
-		}
+		// 	if err != nil {
+		// 		log.Printf("[weekly_embed][AI] ❌ Error: %v", err)
+		// 	} else {
+		// 		description = aiDesc
+		// 		log.Printf("[weekly_embed][AI] ✅ Generated: '%s'", aiDesc)
+		// 	}
+		// } else {
+		// 	log.Println("[weekly_embed] ⚠️ Skipping AI (generator is nil)")
+		// }
 
 		// 💾 Сохраняем достижение в БД
 		if store != nil {
