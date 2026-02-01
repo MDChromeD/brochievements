@@ -88,10 +88,10 @@ func SendWeeklyEmbed(
 		}
 
 		line := fmt.Sprintf(
-			"**%s**\n%s\n→ %s (%s)",
+			"**%s**\n%s\n→ <@%s> (%s)",
 			a.Title,
 			description,
-			a.Username,
+			a.UserID,
 			a.Value,
 		)
 		winners = append(winners, line)
@@ -100,14 +100,9 @@ func SendWeeklyEmbed(
 	}
 
 	embed := &discordgo.MessageEmbed{
-		Title: "📊 Итоги недели",
-		Color: 0xED4245,
-		Fields: []*discordgo.MessageEmbedField{
-			{
-				Name:  "🏆 Достижения",
-				Value: joinOrEmpty(winners),
-			},
-		},
+		Title:       "📊 Итоги недели",
+		Description: joinOrEmpty(winners), // ← используем Description вместо Fields
+		Color:       0xED4245,
 	}
 
 	log.Println("[weekly_embed] Sending embed to Discord...")
