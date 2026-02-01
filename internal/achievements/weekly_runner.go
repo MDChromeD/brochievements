@@ -23,5 +23,12 @@ func RunWeeklyAll(stats []WeeklyUserStats) []*WeeklyAchievement {
 		result = append(result, a)
 	}
 
+	if a := CricketOfWeek(stats); a != nil {
+		result = append(result, a)
+	}
+	if a := CasualGamer(stats); a != nil {
+		result = append(result, a)
+	}
+
 	return result
 }
