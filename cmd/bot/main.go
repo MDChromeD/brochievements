@@ -73,8 +73,8 @@ func main() {
 	}
 
 	if envMinute := os.Getenv("WEEKLY_PUBLISH_MINUTE"); envMinute != "" {
-		if h, err := strconv.Atoi(envMinute); err == nil && h >= 0 && h <= 23 {
-			publishHour = h
+		if m, err := strconv.Atoi(envMinute); err == nil && m >= 0 && m <= 60 {
+			publishMinute = m
 		} else {
 			log.Printf("Invalid WEEKLY_PUBLISH_MINUTE: %s, using default: %d", envMinute, publishMinute)
 		}
