@@ -72,7 +72,7 @@ func main() {
 		}
 	}
 
-	if envMinute := os.Getenv("WEEKLY_PUBLISH_HOUR"); envMinute != "" {
+	if envMinute := os.Getenv("WEEKLY_PUBLISH_MINUTE"); envMinute != "" {
 		if h, err := strconv.Atoi(envMinute); err == nil && h >= 0 && h <= 23 {
 			publishHour = h
 		} else {
