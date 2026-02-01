@@ -228,7 +228,7 @@ func main() {
 
 	go func() {
 
-		achievements.PublishWeeklyDebug(store, generator)
+		//achievements.PublishWeeklyDebug(store, generator)
 
 		// achievements.PublishWeeklyDebug(
 		// 	dg,    // *discordgo.Session
