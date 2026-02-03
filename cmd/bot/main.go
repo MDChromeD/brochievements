@@ -562,7 +562,7 @@ func handleMyAchievements(
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "🏆 У тебя пока нет достижений. Продолжай активничать!",
-				Flags:   discordgo.MessageFlagsEphemeral,
+				// Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
 		return

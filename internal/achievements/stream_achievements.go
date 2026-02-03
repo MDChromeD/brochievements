@@ -24,7 +24,7 @@ func TopStreamer(stats []WeeklyUserStats) *WeeklyAchievement {
 	return &WeeklyAchievement{
 		Code:        "top_stream_time",
 		Title:       "🎥 В эфире больше всех",
-		Description: "Провёл больше всех времени в стриме",
+		Description: "Провёл больше всех времени с включенным стримом",
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(winner.StreamSeconds)/3600),
