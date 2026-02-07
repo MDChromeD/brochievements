@@ -32,6 +32,24 @@ func NewLeaderTracker(
 
 // Start запускает отслеживание лидеров
 func (lt *LeaderTracker) Start() {
+	// Проверяем при старте, если таблица пустая - заполняем сразу
+	go func() {
+		leaders, err := lt.store.GetAllCurrentLeaders()
+		if err != nil {
+			log.Printf("[leader_tracker] Error checking leaders on start: %v", err)
+			return
+		}
+
+		if len(leaders) == 0 {
+			log.Println("[leader_tracker] No leaders in DB, running initial check...")
+			lt.checkLeaders()
+			log.Println("[leader_tracker] Initial check complete")
+		} else {
+			log.Printf("[leader_tracker] Found %d existing leaders in DB", len(leaders))
+		}
+	}()
+
+	// Запускаем обычный цикл проверок
 	go lt.run()
 	log.Println("[leader_tracker] Leader tracking started")
 }
