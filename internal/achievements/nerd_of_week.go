@@ -28,5 +28,6 @@ func NerdOfWeek(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(winner.VoiceSeconds)/3600),
+		Kind:        "achievement",
 	}
 }

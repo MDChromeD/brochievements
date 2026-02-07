@@ -32,5 +32,6 @@ func StuckToGame(stats []WeeklyUserStats) *WeeklyAchievement {
 			winner.MaxSingleGame,
 			float64(winner.MaxSingleGameSec)/3600,
 		),
+		Kind: "achievement",
 	}
 }

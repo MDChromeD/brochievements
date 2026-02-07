@@ -32,5 +32,6 @@ func CricketOfWeek(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      loser.UserID,
 		Username:    loser.Username,
 		Value:       fmt.Sprintf("%.1f мин", float64(loser.VoiceSeconds)/60),
+		Kind:        "anti-achievement",
 	}
 }

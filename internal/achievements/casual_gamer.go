@@ -32,5 +32,6 @@ func CasualGamer(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      loser.UserID,
 		Username:    loser.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(loser.GameSeconds)/3600),
+		Kind:        "anti-achievement",
 	}
 }

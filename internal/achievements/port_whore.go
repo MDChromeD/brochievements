@@ -30,5 +30,6 @@ func PortWhore(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%d смен игр", winner.DistinctGames),
+		Kind:        "achievement",
 	}
 }

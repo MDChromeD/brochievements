@@ -28,5 +28,6 @@ func WentForBread(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(winner.AFKSeconds)/3600),
+		Kind:        "achievement",
 	}
 }

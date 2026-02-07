@@ -7,4 +7,5 @@ type WeeklyAchievement struct {
 	UserID      string
 	Username    string
 	Value       string
+	Kind        string
 }

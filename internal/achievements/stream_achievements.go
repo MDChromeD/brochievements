@@ -28,6 +28,7 @@ func TopStreamer(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(winner.StreamSeconds)/3600),
+		Kind:        "achievement",
 	}
 
 }
@@ -58,6 +59,7 @@ func TopViewer(stats []WeeklyUserStats) *WeeklyAchievement {
 		UserID:      winner.UserID,
 		Username:    winner.Username,
 		Value:       fmt.Sprintf("%.1f ч", float64(winner.StreamViewSeconds)/3600),
+		Kind:        "achievement",
 	}
 
 }

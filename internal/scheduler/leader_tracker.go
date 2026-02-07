@@ -211,7 +211,26 @@ func (lt *LeaderTracker) checkAchievementLeader(
 
 	// Проверяем, сменился ли лидер
 	if currentLeader.UserID != ach.UserID {
-		// Лидер сменился!
+		// 🔍 ПРОВЕРЯЕМ: действительно ли новый лидер ЛУЧШЕ?
+
+		isAntiAchievement := ach.Kind == "anti-achievement"
+
+		var isBetter bool
+		if isAntiAchievement {
+			// Для анти-достижений: меньше = лучше
+			isBetter = numericValue < currentLeader.NumericValue
+		} else {
+			// Для обычных достижений: больше = лучше
+			isBetter = numericValue > currentLeader.NumericValue
+		}
+
+		if !isBetter {
+			log.Printf("[leader_tracker] %s (%s): new value %.2f is NOT better than old value %.2f (keeping %s)",
+				ach.Code, ach.Kind, numericValue, currentLeader.NumericValue, currentLeader.Username)
+			return nil // НЕ меняем лидера
+		}
+
+		// Лидер действительно сменился на лучшего!
 		change := &LeaderChange{
 			AchievementCode:  ach.Code,
 			AchievementTitle: ach.Title,
@@ -235,8 +254,8 @@ func (lt *LeaderTracker) checkAchievementLeader(
 			log.Printf("[leader_tracker] Error updating leader for %s: %v", ach.Code, err)
 		}
 
-		log.Printf("[leader_tracker] Leader changed for %s: %s -> %s",
-			ach.Code, currentLeader.Username, ach.Username)
+		log.Printf("[leader_tracker] Leader changed for %s: %s (%.2f) -> %s (%.2f)",
+			ach.Code, currentLeader.Username, currentLeader.NumericValue, ach.Username, numericValue)
 
 		return change
 	}
