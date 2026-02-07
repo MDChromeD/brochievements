@@ -121,3 +121,22 @@ func joinOrEmpty(lines []string) string {
 	}
 	return strings.Join(lines, "\n\n")
 }
+
+// getCurrentWeekStart возвращает начало текущей недели (понедельник 00:00)
+func getCurrentWeekStart() time.Time {
+	now := time.Now()
+
+	weekday := now.Weekday()
+
+	// В Go воскресенье = 0, понедельник = 1
+	// Нужно вычислить количество дней назад до понедельника
+	var daysFromMonday int
+	if weekday == time.Sunday {
+		daysFromMonday = 6 // воскресенье → 6 дней назад до понедельника
+	} else {
+		daysFromMonday = int(weekday) - 1 // вторник = 2, значит 1 день назад
+	}
+
+	weekStart := now.AddDate(0, 0, -daysFromMonday)
+	return time.Date(weekStart.Year(), weekStart.Month(), weekStart.Day(), 0, 0, 0, 0, weekStart.Location())
+}

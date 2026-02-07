@@ -97,7 +97,17 @@ func New(path string) *Storage {
 	);
 	CREATE INDEX IF NOT EXISTS idx_achievement_user ON achievement_history(user_id);
 	CREATE INDEX IF NOT EXISTS idx_achievement_code ON achievement_history(achievement_code);
-	CREATE INDEX IF NOT EXISTS idx_achievement_week ON achievement_history(week_start);`
+	CREATE INDEX IF NOT EXISTS idx_achievement_week ON achievement_history(week_start);
+	
+	CREATE TABLE IF NOT EXISTS current_leaders (
+    achievement_code TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    value TEXT NOT NULL,
+    numeric_value REAL NOT NULL,
+    checked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    week_start DATE NOT NULL
+	);`
 
 	if _, err := db.Exec(query); err != nil {
 		log.Fatal(err)

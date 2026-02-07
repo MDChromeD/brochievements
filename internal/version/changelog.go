@@ -1,5 +1,6 @@
 package version
 
 var ChangeNotes = []string{
-	"Добавлена команда /my_achievements",
+	"Релиз! :D",
+	"Добавлено отслеживание лидеров недели и команда /leaders",
 }

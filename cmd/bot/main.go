@@ -144,6 +144,10 @@ func main() {
 			Name:        "weekly",
 			Description: "[ADMIN] Опубликовать итоги недели прямо сейчас",
 		},
+		{
+			Name:        "leaders",
+			Description: "Показать текущих лидеров недели",
+		},
 	}
 
 	dg.Identify.Intents = discordgo.IntentsGuilds |
@@ -192,6 +196,8 @@ func main() {
 			handleMyAchievements(s, i, store)
 		case "weekly":
 			handleWeeklyPublish(s, i, store, generator, channelID)
+		case "leaders":
+			handleLeadersCommand(s, i, store)
 		}
 	})
 
@@ -219,25 +225,23 @@ func main() {
 
 	notifyIfUpdated(dg)
 
+	// Запускаем еженедельный планировщик
 	weeklyScheduler := scheduler.NewWeeklyScheduler(dg, store, channelID, generator, publishHour, publishMinute, publishDay)
 	weeklyScheduler.Start()
 	defer weeklyScheduler.Stop()
 
-	// ------ удалить
-	// ===== WEEKLY DEBUG RUN (ONE-TIME) =====
+	// ===== ЗАМЕНИТЕ НА: =====
 
-	go func() {
-
-		//achievements.PublishWeeklyDebug(store, generator)
-
-		// achievements.PublishWeeklyDebug(
-		// 	dg,    // *discordgo.Session
-		// 	store, // *storage.Storage
-		// 	channelID,
-		// 	generator,
-		// )
-	}()
-	// ------ удалить
+	// 🆕 Запускаем трекер лидеров (если включено)
+	enableLeaderTracking := os.Getenv("ENABLE_LEADER_TRACKING")
+	if enableLeaderTracking == "true" || enableLeaderTracking == "1" {
+		log.Println("[config] Leader tracking enabled")
+		leaderTracker := scheduler.NewLeaderTracker(dg, store, channelID)
+		leaderTracker.Start()
+		defer leaderTracker.Stop()
+	} else {
+		log.Println("[config] Leader tracking disabled (set ENABLE_LEADER_TRACKING=true to enable)")
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -562,7 +566,6 @@ func handleMyAchievements(
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: "🏆 У тебя пока нет достижений. Продолжай активничать!",
-				// Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		})
 		return
@@ -717,6 +720,64 @@ func handleWeeklyPublish(
 	}
 
 	log.Println("[weekly command] === END handleWeeklyPublish ===")
+}
+
+// 🆕 Команда /leaders - показать текущих лидеров
+func handleLeadersCommand(
+	s *discordgo.Session,
+	i *discordgo.InteractionCreate,
+	store *storage.Storage,
+) {
+	// Загружаем текущую статистику
+	stats, err := achievements.LoadWeeklyStats(store)
+	if err != nil {
+		log.Println("[leaders command] Error loading stats:", err)
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "❌ Ошибка при загрузке статистики",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	// Получаем достижения
+	achs := achievements.RunWeeklyAll(stats)
+
+	if len(achs) == 0 {
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "📊 Пока нет лидеров на этой неделе",
+				Flags:   discordgo.MessageFlagsEphemeral,
+			},
+		})
+		return
+	}
+
+	// Формируем сообщение
+	var leaderLines []string
+	for _, ach := range achs {
+		line := fmt.Sprintf("%s — **%s** (%s)", ach.Title, ach.Username, ach.Value)
+		leaderLines = append(leaderLines, line)
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "🏆 Текущие лидеры недели",
+		Description: strings.Join(leaderLines, "\n\n"),
+		Color:       0xFFD700,
+		Footer: &discordgo.MessageEmbedFooter{
+			Text: fmt.Sprintf("Обновлено: %s", time.Now().Format("15:04 02.01")),
+		},
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+		},
+	})
 }
 
 func onPresenceUpdate(store *storage.Storage, guildID string) func(*discordgo.Session, *discordgo.PresenceUpdate) {

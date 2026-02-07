@@ -1,8 +1,6 @@
 package achievements
 
-import (
-	"brochievements/internal/storage"
-)
+import "brochievements/internal/storage"
 
 func AFKFarmer(store *storage.Storage) (*WeeklyAchievement, error) {
 	res, err := store.GetTopAFKFarmer()
